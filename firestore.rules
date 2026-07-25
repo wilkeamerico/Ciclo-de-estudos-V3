@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permite leitura, escrita e exclusão sem autenticação pois o login externo por senha e Google foi removido.
+    match /users/{userId}/{document=**} {
+      allow read, write, delete: if true;
+    }
+  }
+}

@@ -1,0 +1,1824 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { StudyState, Disciplina, Assunto, RegistroQuestao } from "../types";
+import { 
+  Play, Pause, RotateCcw, Plus, Trash2, Calendar, FileText, 
+  CheckCircle2, ChevronUp, ChevronDown, Upload, AlertCircle, 
+  Edit, Filter, GripVertical, BookOpen, CheckCircle, RefreshCw,
+  Volume2, VolumeX, Bell, Award, Sparkles, X
+} from "lucide-react";
+
+interface StudyViewProps {
+  state: StudyState;
+  updateState: (newState: StudyState) => void;
+  darkMode: boolean;
+}
+
+export default function StudyView({ state, updateState, darkMode }: StudyViewProps) {
+  const { edital, currentCycle } = state;
+
+  // Flattened list of disciplines from the active study cycle
+  const disciplinas = useMemo(() => {
+    const list: Disciplina[] = [];
+    edital.categorias.forEach((cat) => {
+      cat.disciplinas.forEach((d) => {
+        list.push(d);
+      });
+    });
+    return list;
+  }, [edital]);
+
+  // Support for custom block ordering (moved and positioned at user's discretion)
+  const [orderedDisciplinas, setOrderedDisciplinas] = useState<Disciplina[]>([]);
+
+  useEffect(() => {
+    if (disciplinas.length === 0) {
+      setOrderedDisciplinas([]);
+      return;
+    }
+    const cachedOrder = localStorage.getItem(`ciclo_order_${edital.orgao}_${edital.cargo}`);
+    if (cachedOrder) {
+      try {
+        const orderIds = JSON.parse(cachedOrder) as string[];
+        const sorted = [...disciplinas].sort((a, b) => {
+          const idxA = orderIds.indexOf(a.id);
+          const idxB = orderIds.indexOf(b.id);
+          if (idxA === -1 && idxB === -1) return 0;
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        });
+        setOrderedDisciplinas(sorted);
+        return;
+      } catch (e) {
+        console.error("Erro ao carregar ordem customizada de blocos:", e);
+      }
+    }
+    setOrderedDisciplinas(disciplinas);
+  }, [disciplinas, edital.orgao, edital.cargo]);
+
+  // Keys for local storage persistence per edital & cycle
+  const storageKey = useMemo(() => {
+    const safeOrgao = (edital.orgao || "default").replace(/\s+/g, "_");
+    const safeCargo = (edital.cargo || "default").replace(/\s+/g, "_");
+    return `study_timers_${safeOrgao}_${safeCargo}_c${currentCycle}`;
+  }, [edital.orgao, edital.cargo, currentCycle]);
+
+  const discStorageKey = useMemo(() => {
+    const safeOrgao = (edital.orgao || "default").replace(/\s+/g, "_");
+    const safeCargo = (edital.cargo || "default").replace(/\s+/g, "_");
+    return `study_disc_${safeOrgao}_${safeCargo}_c${currentCycle}`;
+  }, [edital.orgao, edital.cargo, currentCycle]);
+
+  // Selected active block/discipline ID
+  const [selectedDiscId, setSelectedDiscId] = useState<string>("");
+
+  useEffect(() => {
+    if (orderedDisciplinas.length > 0) {
+      const savedDiscId = localStorage.getItem(discStorageKey);
+      if (savedDiscId && orderedDisciplinas.some((d) => d.id === savedDiscId)) {
+        setSelectedDiscId(savedDiscId);
+      } else if (!selectedDiscId || !orderedDisciplinas.some((d) => d.id === selectedDiscId)) {
+        setSelectedDiscId(orderedDisciplinas[0].id);
+      }
+    }
+  }, [orderedDisciplinas, discStorageKey]);
+
+  useEffect(() => {
+    if (selectedDiscId && discStorageKey) {
+      localStorage.setItem(discStorageKey, selectedDiscId);
+    }
+  }, [selectedDiscId, discStorageKey]);
+
+  const activeDisciplina = useMemo(() => {
+    return orderedDisciplinas.find((d) => d.id === selectedDiscId) || null;
+  }, [orderedDisciplinas, selectedDiscId]);
+
+  // Selected topic for detailing daily question registers
+  const [activeAssuntoId, setActiveAssuntoId] = useState<string | null>(null);
+
+  // --- TIMER STATE WITH INDIVIDUAL BLOCK PERSISTENCE & CYCLE EXPIRATION ---
+  // Store remaining seconds for each block (key is disciplineId)
+  const [blockTimers, setBlockTimers] = useState<{ [id: string]: number }>({});
+  const blockTimersRef = useRef(blockTimers);
+  
+  useEffect(() => {
+    blockTimersRef.current = blockTimers;
+  }, [blockTimers]);
+
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  // Load blockTimers from localStorage when storageKey or disciplinas changes
+  useEffect(() => {
+    if (disciplinas.length === 0) return;
+
+    let loadedTimers: { [id: string]: number } = {};
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") {
+          loadedTimers = parsed;
+        }
+      } catch (err) {
+        console.error("Erro ao carregar tempos salvos do ciclo:", err);
+      }
+    }
+
+    const mergedTimers: { [id: string]: number } = {};
+    disciplinas.forEach((d) => {
+      if (loadedTimers[d.id] !== undefined && typeof loadedTimers[d.id] === "number") {
+        mergedTimers[d.id] = loadedTimers[d.id];
+      } else {
+        mergedTimers[d.id] = (d.horasPorCiclo || 1.0) * 3600;
+      }
+    });
+
+    setBlockTimers(mergedTimers);
+  }, [storageKey, disciplinas]);
+
+  // Save blockTimers to localStorage whenever blockTimers state updates
+  useEffect(() => {
+    if (Object.keys(blockTimers).length > 0 && storageKey) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(blockTimers));
+      } catch (err) {
+        console.error("Erro ao salvar tempos do ciclo:", err);
+      }
+    }
+  }, [blockTimers, storageKey]);
+
+  // --- SOUND AND VISUAL NOTIFICATION SIGNAL ---
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  const [notificationAlert, setNotificationAlert] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    submessage?: string;
+    type: 'block' | 'cycle';
+    blocoNome?: string;
+    proximoBlocoNome?: string;
+    cicloNumero?: number;
+  } | null>(null);
+
+  const playNotificationSound = (type: 'block' | 'cycle' = 'block') => {
+    if (!soundEnabledRef.current) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
+      if (type === 'block') {
+        // Double chime for block completion (D5 -> A5)
+        const notes = [587.33, 880];
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.2);
+          gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.2);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + idx * 0.2 + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.2);
+          osc.stop(ctx.currentTime + idx * 0.2 + 0.5);
+        });
+      } else {
+        // Triumph fanfare chord sequence for cycle completion (C5 -> E5 -> G5 -> C6)
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.15);
+          gain.gain.setValueAtTime(0.4, ctx.currentTime + idx * 0.15);
+          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + idx * 0.15 + 0.6);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.15);
+          osc.stop(ctx.currentTime + idx * 0.15 + 0.65);
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao reproduzir alerta sonoro:", err);
+    }
+  };
+
+  // Form editing for manual override of active block timer
+  const [isEditingTimer, setIsEditingTimer] = useState(false);
+  const [timerInputHours, setTimerInputHours] = useState(1);
+  const [timerInputMinutes, setTimerInputMinutes] = useState(0);
+  const [timerInputSeconds, setTimerInputSeconds] = useState(0);
+
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Synchronize input fields when the active block or its timer state changes
+  useEffect(() => {
+    if (activeDisciplina) {
+      const plannedSecs = (activeDisciplina.horasPorCiclo || 1.0) * 3600;
+      const currentRemaining = blockTimers[activeDisciplina.id] !== undefined ? blockTimers[activeDisciplina.id] : plannedSecs;
+      setTimerInputHours(Math.floor(currentRemaining / 3600));
+      setTimerInputMinutes(Math.floor((currentRemaining % 3600) / 60));
+      setTimerInputSeconds(currentRemaining % 60);
+    }
+  }, [selectedDiscId, activeDisciplina, blockTimers]);
+
+  // Handle study session history registration
+  const handleSaveStudySessionForId = (discId: string, plannedSeconds: number) => {
+    const disc = disciplinas.find(d => d.id === discId);
+    if (!disc) return;
+
+    const remaining = blockTimers[discId] !== undefined ? blockTimers[discId] : plannedSeconds;
+    const elapsedSeconds = plannedSeconds - remaining;
+    const elapsedMins = elapsedSeconds > 0 ? Math.round(elapsedSeconds / 60) : Math.round(plannedSeconds / 60);
+
+    const newSession = {
+      id: "session_" + Date.now(),
+      disciplinaId: disc.id,
+      disciplinaNome: disc.nome,
+      data: new Date().toISOString().split("T")[0],
+      duracaoMinutos: elapsedMins || 45,
+      questoesAcertos: 0,
+      questoesErros: 0,
+      ciclo: currentCycle
+    };
+
+    updateState({
+      ...state,
+      sessions: [...state.sessions, newSession]
+    });
+  };
+
+  // Process core study session cycle expiration
+  const handleCycleCompleted = () => {
+    const nextCycle = currentCycle + 1;
+    updateState({
+      ...state,
+      currentCycle: nextCycle
+    });
+
+    const safeOrgao = (edital.orgao || "default").replace(/\s+/g, "_");
+    const safeCargo = (edital.cargo || "default").replace(/\s+/g, "_");
+    const nextStorageKey = `study_timers_${safeOrgao}_${safeCargo}_c${nextCycle}`;
+
+    // Reset all block timers back to their original estimated plan
+    const resetTimers: { [id: string]: number } = {};
+    disciplinas.forEach((d) => {
+      resetTimers[d.id] = (d.horasPorCiclo || 1.0) * 3600;
+    });
+    setBlockTimers(resetTimers);
+    setIsTimerRunning(false);
+
+    try {
+      localStorage.setItem(nextStorageKey, JSON.stringify(resetTimers));
+    } catch (e) {
+      console.error("Erro ao salvar tempos do novo ciclo:", e);
+    }
+
+    // Audio sound chime + visual notification modal
+    playNotificationSound('cycle');
+    setNotificationAlert({
+      show: true,
+      title: `🏆 Ciclo nº ${currentCycle} Finalizado!`,
+      message: `Parabéns! Todos os blocos do Ciclo de Estudos foram concluídos com sucesso!`,
+      submessage: `O Ciclo nº ${nextCycle} foi iniciado e os tempos de todos os blocos foram renovados.`,
+      type: 'cycle',
+      cicloNumero: currentCycle
+    });
+  };
+
+  // Core Timer Interval loop hook
+  useEffect(() => {
+    if (isTimerRunning && selectedDiscId) {
+      intervalRef.current = setInterval(() => {
+        const disc = disciplinas.find(d => d.id === selectedDiscId);
+        if (!disc) return;
+        const plannedSecs = (disc.horasPorCiclo || 1.0) * 3600;
+        const currentRemaining = blockTimersRef.current[selectedDiscId] !== undefined ? blockTimersRef.current[selectedDiscId] : plannedSecs;
+
+        if (currentRemaining <= 1) {
+          setBlockTimers((prev) => ({ ...prev, [selectedDiscId]: 0 }));
+
+          // Automatically log study session metrics
+          handleSaveStudySessionForId(selectedDiscId, plannedSecs);
+
+          // Play audio notification chime for block completion
+          playNotificationSound('block');
+
+          // Transition to the next study block in sequence
+          const currIdx = orderedDisciplinas.findIndex(d => d.id === selectedDiscId);
+          if (currIdx !== -1 && currIdx < orderedDisciplinas.length - 1) {
+            const nextDisc = orderedDisciplinas[currIdx + 1];
+            
+            // Set visual notification modal
+            setNotificationAlert({
+              show: true,
+              title: "⏰ Tempo do Bloco Finalizado!",
+              message: `Sessão encerrada para o bloco "${disc.nome}".`,
+              submessage: `Iniciando automaticamente o próximo bloco: "${nextDisc.nome}".`,
+              type: 'block',
+              blocoNome: disc.nome,
+              proximoBlocoNome: nextDisc.nome
+            });
+            
+            setSelectedDiscId(nextDisc.id);
+          } else {
+            // End of the chain: stop the timer and verify if all blocks are finished
+            setIsTimerRunning(false);
+            if (intervalRef.current) clearInterval(intervalRef.current);
+
+            const nextTimers = { ...blockTimersRef.current, [selectedDiscId]: 0 };
+            const allFinished = orderedDisciplinas.every(d => {
+              const rem = d.id === selectedDiscId ? 0 : (nextTimers[d.id] !== undefined ? nextTimers[d.id] : (d.horasPorCiclo || 1.0) * 3600);
+              return rem <= 0;
+            });
+
+            if (allFinished) {
+              handleCycleCompleted();
+            } else {
+              setNotificationAlert({
+                show: true,
+                title: "⏰ Tempo do Bloco Finalizado!",
+                message: `Sessão encerrada para o bloco "${disc.nome}".`,
+                submessage: `Todos os blocos deste ciclo foram finalizados!`,
+                type: 'block',
+                blocoNome: disc.nome
+              });
+            }
+          }
+        } else {
+          setBlockTimers((prev) => ({ ...prev, [selectedDiscId]: currentRemaining - 1 }));
+        }
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isTimerRunning, selectedDiscId, disciplinas, orderedDisciplinas, currentCycle]);
+
+  const toggleTimer = () => {
+    setIsTimerRunning(!isTimerRunning);
+  };
+
+  const resetTimer = () => {
+    if (!activeDisciplina) return;
+    setIsTimerRunning(false);
+    const plannedSecs = (activeDisciplina.horasPorCiclo || 1.0) * 3600;
+    setBlockTimers(prev => ({
+      ...prev,
+      [activeDisciplina.id]: plannedSecs
+    }));
+  };
+
+  const handleSaveCustomTimer = () => {
+    if (!activeDisciplina) return;
+    const totalSecs = (timerInputHours * 3600) + (timerInputMinutes * 60) + timerInputSeconds;
+    setBlockTimers(prev => ({
+      ...prev,
+      [activeDisciplina.id]: totalSecs
+    }));
+    setIsEditingTimer(false);
+  };
+
+  // Helper formatting for block bar displaying timer progress
+  const getBlockTimerState = (discId: string) => {
+    const disc = disciplinas.find(d => d.id === discId);
+    const plannedSecs = (disc?.horasPorCiclo || 1.0) * 3600;
+    const remaining = blockTimers[discId] !== undefined ? blockTimers[discId] : plannedSecs;
+    const elapsed = Math.max(0, plannedSecs - remaining);
+    const pct = Math.min((elapsed / plannedSecs) * 100, 100);
+
+    const hrs = Math.floor(remaining / 3600);
+    const mins = Math.floor((remaining % 3600) / 60);
+    const secs = remaining % 60;
+    const formatted = `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+
+    return { remaining, elapsed, pct, formatted, plannedSecs };
+  };
+
+  // Helper formatting for overall cycle progress
+  const cycleProgress = useMemo(() => {
+    let totalPlannedSecs = 0;
+    let totalRemainingSecs = 0;
+
+    orderedDisciplinas.forEach((d) => {
+      const plannedSecs = (d.horasPorCiclo || 1.0) * 3600;
+      const remaining = blockTimers[d.id] !== undefined ? blockTimers[d.id] : plannedSecs;
+      totalPlannedSecs += plannedSecs;
+      totalRemainingSecs += remaining;
+    });
+
+    const totalElapsedSecs = Math.max(0, totalPlannedSecs - totalRemainingSecs);
+    const totalPct = totalPlannedSecs > 0 ? Math.min((totalElapsedSecs / totalPlannedSecs) * 100, 100) : 0;
+
+    const elapsedHours = (totalElapsedSecs / 3600).toFixed(1);
+    const plannedHours = (totalPlannedSecs / 3600).toFixed(1);
+
+    const remHrs = Math.floor(totalRemainingSecs / 3600);
+    const remMins = Math.floor((totalRemainingSecs % 3600) / 60);
+    const remSecs = totalRemainingSecs % 60;
+    const formattedRemaining = `${String(remHrs).padStart(2, "0")}:${String(remMins).padStart(2, "0")}:${String(remSecs).padStart(2, "0")}`;
+
+    const isCompleted = totalPlannedSecs > 0 && totalRemainingSecs <= 0;
+
+    return {
+      totalPlannedSecs,
+      totalRemainingSecs,
+      totalElapsedSecs,
+      totalPct,
+      elapsedHours,
+      plannedHours,
+      formattedRemaining,
+      isCompleted
+    };
+  }, [orderedDisciplinas, blockTimers]);
+
+  // --- DRAG AND DROP REORDERING EVENT HANDLERS ---
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const novos = [...orderedDisciplinas];
+    const draggedItem = novos[draggedIndex];
+    novos.splice(draggedIndex, 1);
+    novos.splice(index, 0, draggedItem);
+    setOrderedDisciplinas(novos);
+    localStorage.setItem(`ciclo_order_${edital.orgao}_${edital.cargo}`, JSON.stringify(novos.map(d => d.id)));
+    setDraggedIndex(null);
+  };
+
+  const moverBloco = (index: number, direcao: "up" | "down") => {
+    const novos = [...orderedDisciplinas];
+    const targetIndex = direcao === "up" ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < novos.length) {
+      const temp = novos[index];
+      novos[index] = novos[targetIndex];
+      novos[targetIndex] = temp;
+      setOrderedDisciplinas(novos);
+      localStorage.setItem(`ciclo_order_${edital.orgao}_${edital.cargo}`, JSON.stringify(novos.map(d => d.id)));
+    }
+  };
+
+  // --- FORM STATES FOR REGISTERING TOPICS AND QUESTION LOGS ---
+  const [newTopicName, setNewTopicName] = useState("");
+  const [newTopicIncidencia, setNewTopicIncidencia] = useState<"ALTA" | "MÉDIA" | "BAIXA">("MÉDIA");
+  
+  const [newLogDate, setNewLogDate] = useState(() => {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, "0");
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${day}/${m}/${d.getFullYear()}`;
+  });
+  const [newLogAcertos, setNewLogAcertos] = useState<number>(0);
+  const [newLogErros, setNewLogErros] = useState<number>(0);
+
+  // --- FILTERS STATE FOR "ESTUDAR" TOPICS LISTING ---
+  const [filterText, setFilterText] = useState("");
+  const [filterIncidencia, setFilterIncidencia] = useState<"TODAS" | "ALTA" | "MÉDIA" | "BAIXA">("TODAS");
+  const [filterStatus, setFilterStatus] = useState<"TODOS" | "NÃO ESTUDADO" | "ESTUDADO" | "REVISADO">("TODOS");
+
+  // --- RECTIFY / MANAGE TOPIC LOGS AND CREATION ---
+  const handleAddTopic = () => {
+    if (!newTopicName.trim() || !activeDisciplina) return;
+
+    const topicNum = String(activeDisciplina.assuntos.length + 1).padStart(2, "0");
+    const formattedName = `${topicNum} - ${newTopicName.trim()}`;
+
+    const newAssunto: Assunto = {
+      id: "ass_" + Date.now(),
+      nome: formattedName,
+      registros: [],
+      incidencia: newTopicIncidencia,
+      status: "NÃO ESTUDADO"
+    };
+
+    const updatedCategorias = edital.categorias.map((cat) => {
+      return {
+        ...cat,
+        disciplinas: cat.disciplinas.map((disc) => {
+          if (disc.id === activeDisciplina.id) {
+            return {
+              ...disc,
+              assuntos: [...disc.assuntos, newAssunto]
+            };
+          }
+          return disc;
+        })
+      };
+    });
+
+    updateState({
+      ...state,
+      edital: {
+        ...edital,
+        categorias: updatedCategorias
+      }
+    });
+
+    setNewTopicName("");
+  };
+
+  const handleDeleteTopic = (assuntoId: string) => {
+    if (!activeDisciplina) return;
+
+    const updatedCategorias = edital.categorias.map((cat) => {
+      return {
+        ...cat,
+        disciplinas: cat.disciplinas.map((disc) => {
+          if (disc.id === activeDisciplina.id) {
+            return {
+              ...disc,
+              assuntos: disc.assuntos.filter((ass) => ass.id !== assuntoId)
+            };
+          }
+          return disc;
+        })
+      };
+    });
+
+    updateState({
+      ...state,
+      edital: {
+        ...edital,
+        categorias: updatedCategorias
+      }
+    });
+
+    if (activeAssuntoId === assuntoId) {
+      setActiveAssuntoId(null);
+    }
+  };
+
+  const handleUpdateTopic = (topicId: string, updates: Partial<Assunto>) => {
+    if (!activeDisciplina) return;
+
+    const updatedCategorias = edital.categorias.map((cat) => {
+      return {
+        ...cat,
+        disciplinas: cat.disciplinas.map((disc) => {
+          if (disc.id === activeDisciplina.id) {
+            return {
+              ...disc,
+              assuntos: disc.assuntos.map((ass) => {
+                if (ass.id === topicId) {
+                  return {
+                    ...ass,
+                    ...updates
+                  };
+                }
+                return ass;
+              })
+            };
+          }
+          return disc;
+        })
+      };
+    });
+
+    updateState({
+      ...state,
+      edital: {
+        ...edital,
+        categorias: updatedCategorias
+      }
+    });
+  };
+
+  const handleAddQuestionLog = (assuntoId: string) => {
+    if (newLogAcertos < 0 || newLogErros < 0) return;
+
+    const total = newLogAcertos + newLogErros;
+    const newReg: RegistroQuestao = {
+      id: "reg_" + Date.now(),
+      data: newLogDate,
+      acertos: newLogAcertos,
+      erros: newLogErros,
+      total: total
+    };
+
+    const updatedCategorias = edital.categorias.map((cat) => {
+      return {
+        ...cat,
+        disciplinas: cat.disciplinas.map((disc) => {
+          if (disc.id === selectedDiscId) {
+            return {
+              ...disc,
+              assuntos: disc.assuntos.map((ass) => {
+                if (ass.id === assuntoId) {
+                  return {
+                    ...ass,
+                    registros: [...ass.registros, newReg]
+                  };
+                }
+                return ass;
+              })
+            };
+          }
+          return disc;
+        })
+      };
+    });
+
+    updateState({
+      ...state,
+      edital: {
+        ...edital,
+        categorias: updatedCategorias
+      }
+    });
+
+    setNewLogAcertos(0);
+    setNewLogErros(0);
+  };
+
+  const handleDeleteQuestionLog = (assuntoId: string, logId: string) => {
+    const updatedCategorias = edital.categorias.map((cat) => {
+      return {
+        ...cat,
+        disciplinas: cat.disciplinas.map((disc) => {
+          if (disc.id === selectedDiscId) {
+            return {
+              ...disc,
+              assuntos: disc.assuntos.map((ass) => {
+                if (ass.id === assuntoId) {
+                  return {
+                    ...ass,
+                    registros: ass.registros.filter((r) => r.id !== logId)
+                  };
+                }
+                return ass;
+              })
+            };
+          }
+          return disc;
+        })
+      };
+    });
+
+    updateState({
+      ...state,
+      edital: {
+        ...edital,
+        categorias: updatedCategorias
+      }
+    });
+  };
+
+  // Retrieve combined question stats for each block
+  const getBlockQuestionStats = (disc: Disciplina) => {
+    let acertos = 0;
+    let erros = 0;
+    disc.assuntos.forEach((ass) => {
+      ass.registros.forEach((reg) => {
+        acertos += reg.acertos || 0;
+        erros += reg.erros || 0;
+      });
+    });
+    return { acertos, erros, total: acertos + erros };
+  };
+
+  // Retrieve specific topic daily logs totals
+  const getTopicTotals = (assunto: Assunto) => {
+    let acertos = 0;
+    let erros = 0;
+    assunto.registros.forEach((r) => {
+      acertos += r.acertos || 0;
+      erros += r.erros || 0;
+    });
+    return {
+      acertos,
+      erros,
+      total: acertos + erros
+    };
+  };
+
+  // --- AI-POWERED TEST BOOKLET ANALYZER ---
+  const [showAIAnalyzer, setShowAIAnalyzer] = useState(false);
+  const [analyzerStatus, setAnalyzerStatus] = useState("");
+  const [analyzerError, setAnalyzerError] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [fileBase64, setFileBase64] = useState("");
+  const [fileMimeType, setFileMimeType] = useState("");
+  const [manualText, setManualText] = useState("");
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadedFile(file);
+    setAnalyzerError("");
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      const splitData = base64String.split(",");
+      if (splitData.length > 1) {
+        setFileBase64(splitData[1]);
+        setFileMimeType(file.type);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRunAIAnalysis = async () => {
+    if (!activeDisciplina) return;
+    if (!fileBase64 && !manualText.trim()) {
+      setAnalyzerError("Por favor, anexe um arquivo PDF/Imagem ou cole o texto das questões.");
+      return;
+    }
+
+    setAnalyzerStatus("Iniciando análise com Gemini AI...");
+    setAnalyzerError("");
+
+    try {
+      const payload = {
+        pdfBase64: fileBase64 || undefined,
+        pdfMimeType: fileMimeType || undefined,
+        text: manualText.trim() || undefined,
+        assuntos: activeDisciplina.assuntos.map(a => a.nome)
+      };
+
+      const res = await fetch("/api/scan-caderno", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Erro de processamento no servidor.");
+      }
+
+      const data = await res.json();
+      if (data.classificacoes && Array.isArray(data.classificacoes)) {
+        // Map returned incidences back to topics
+        const updatedCategorias = edital.categorias.map((cat) => {
+          return {
+            ...cat,
+            disciplinas: cat.disciplinas.map((disc) => {
+              if (disc.id === activeDisciplina.id) {
+                return {
+                  ...disc,
+                  assuntos: disc.assuntos.map((ass) => {
+                    const match = data.classificacoes.find(
+                      (item: any) => 
+                        item.assunto.toLowerCase().includes(ass.nome.toLowerCase()) || 
+                        ass.nome.toLowerCase().includes(item.assunto.toLowerCase())
+                    );
+                    if (match) {
+                      return {
+                        ...ass,
+                        incidencia: (match.incidencia as "ALTA" | "MÉDIA" | "BAIXA") || "MÉDIA"
+                      };
+                    }
+                    return ass;
+                  })
+                };
+              }
+              return disc;
+            })
+          };
+        });
+
+        updateState({
+          ...state,
+          edital: {
+            ...edital,
+            categorias: updatedCategorias
+          }
+        });
+
+        setAnalyzerStatus("");
+        alert("Análise concluída com sucesso! Os assuntos foram categorizados por relevância.");
+        setShowAIAnalyzer(false);
+        setUploadedFile(null);
+        setFileBase64("");
+        setManualText("");
+      } else {
+        throw new Error("Formato de resposta inválido do modelo de Inteligência Artificial.");
+      }
+    } catch (error: any) {
+      console.error(error);
+      setAnalyzerError(error.message || "Não foi possível conectar ao servidor de IA.");
+      setAnalyzerStatus("");
+    }
+  };
+
+  // Filter topics in real time
+  const filteredTopics = useMemo(() => {
+    if (!activeDisciplina) return [];
+    return activeDisciplina.assuntos.filter((ass) => {
+      const matchesText = ass.nome.toLowerCase().includes(filterText.toLowerCase());
+      
+      const currentInc = ass.incidencia || "MÉDIA";
+      const matchesInc = filterIncidencia === "TODAS" || currentInc === filterIncidencia;
+      
+      const currentStatus = ass.status || "NÃO ESTUDADO";
+      const matchesStatus = filterStatus === "TODOS" || currentStatus === filterStatus;
+
+      return matchesText && matchesInc && matchesStatus;
+    });
+  }, [activeDisciplina, filterText, filterIncidencia, filterStatus]);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in font-sans">
+      
+      {/* SEÇÃO DA SEQUÊNCIA DOS BLOCOS DO CICLO (COL-SPAN-5) */}
+      <div className="lg:col-span-5">
+        
+        {/* Unified study loop control card */}
+        <div className={`p-5 rounded-2xl border transition-all flex flex-col ${
+          darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+        }`}>
+          
+          {/* Section 1: Ciclo de Estudos em Curso (Compact indicator & Overall Progress Bar) */}
+          <div className="pb-4 mb-4 border-b border-gray-100/10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-600/10 text-blue-500 font-extrabold text-xl shrink-0">
+                  {currentCycle}
+                </div>
+                <div>
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                    Ciclo em Curso
+                  </h4>
+                  <p className={`text-[11px] ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                    Seus blocos estão no ciclo nº <strong>{currentCycle}</strong>.
+                  </p>
+                </div>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                darkMode ? "bg-blue-900/30 text-blue-300" : "bg-blue-50 text-blue-700"
+              }`}>
+                Ativo
+              </span>
+            </div>
+
+            {/* Overall Cycle Progress Bar */}
+            <div className={`relative overflow-hidden p-3 rounded-xl border mt-3 transition-all ${
+              darkMode ? "border-[#1e2d4d] bg-[#111e3b]/40" : "border-gray-200 bg-gray-50/70"
+            }`}>
+              {/* Progress Filling Overlay */}
+              <div 
+                className="absolute left-0 top-0 bottom-0 transition-all duration-1000 ease-out" 
+                style={{ 
+                  width: `${cycleProgress.totalPct}%`, 
+                  backgroundColor: cycleProgress.isCompleted ? "#10b981" : "#3b82f6",
+                  opacity: darkMode ? 0.08 : 0.05
+                }} 
+              />
+
+              {/* Top Row: Title & Formatted Time */}
+              <div className="relative z-10 flex justify-between items-start">
+                <div>
+                  <span className="text-[8px] font-bold text-blue-500 uppercase tracking-widest block">
+                    PROGRESSO GERAL DO CICLO
+                  </span>
+                  <h4 className={`text-xs font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                    Andamento do Ciclo {currentCycle}
+                  </h4>
+                </div>
+
+                <div className="text-right flex flex-col items-end">
+                  <span className={`text-[11px] font-mono font-extrabold ${
+                    cycleProgress.isCompleted ? "text-emerald-500" : darkMode ? "text-blue-300" : "text-blue-600"
+                  }`}>
+                    {cycleProgress.isCompleted ? "CONCLUÍDO" : cycleProgress.formattedRemaining}
+                  </span>
+                  <span className={`text-[9px] ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                    Meta Total: {cycleProgress.plannedHours}h
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Bar Line */}
+              <div className="relative z-10 w-full bg-gray-200/50 dark:bg-gray-800/60 h-1.5 rounded-full overflow-hidden mt-2.5">
+                <div 
+                  className="h-full transition-all duration-1000 ease-out rounded-full"
+                  style={{ 
+                    width: `${cycleProgress.totalPct}%`,
+                    backgroundColor: cycleProgress.isCompleted ? "#10b981" : "#3b82f6"
+                  }}
+                />
+              </div>
+
+              {/* Bottom Row Metrics */}
+              <div className="relative z-10 flex justify-between items-center mt-2.5 pt-1.5 border-t border-gray-100/10 text-[9px]">
+                <span className={`font-semibold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Concluído: <span className={darkMode ? "text-white" : "text-gray-800"}>{cycleProgress.elapsedHours}h</span> ({cycleProgress.totalPct.toFixed(1)}%)
+                </span>
+                <span className={`font-semibold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  {orderedDisciplinas.length} {orderedDisciplinas.length === 1 ? "bloco" : "blocos"} no ciclo
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Temporizador Geral (General Timer) */}
+          {activeDisciplina && (
+            <div className="flex flex-col items-center justify-center pb-5 mb-5 border-b border-gray-100/10 relative overflow-hidden">
+              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 text-center ${
+                darkMode ? "text-gray-300" : "text-gray-600"
+              }`}>
+                Temporizador Geral: <strong className="text-blue-500">{activeDisciplina.nome}</strong>
+              </h4>
+
+              {/* Visual Timer Display (Responsive & Prominent) */}
+              <div className="relative w-52 h-52 sm:w-60 sm:h-60 md:w-64 md:h-64 flex flex-col items-center justify-center my-1 select-none">
+                <svg viewBox="0 0 200 200" className="w-full h-full absolute transform -rotate-90">
+                  <circle cx="100" cy="100" r="85" fill="transparent" stroke={darkMode ? "#1e2d4d" : "#e2e8f0"} strokeWidth="7" />
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="85"
+                    fill="transparent"
+                    stroke={activeDisciplina?.cor || "#3b82f6"}
+                    strokeWidth="7"
+                    strokeDasharray={2 * Math.PI * 85}
+                    strokeDashoffset={2 * Math.PI * 85 * (1 - getBlockTimerState(activeDisciplina.id).pct / 100)}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000"
+                  />
+                </svg>
+
+                {isEditingTimer ? (
+                  <div className="z-10 flex flex-col items-center space-y-2 bg-[#101b35] p-3 rounded-2xl border border-blue-600/30 shadow-xl max-w-[210px]">
+                    <span className="text-[10px] font-extrabold uppercase text-blue-400 tracking-wider">Ajustar Tempo (H:M:S)</span>
+                    <div className="flex items-center space-x-1.5">
+                      <div className="flex flex-col items-center">
+                        <span className="text-[8px] text-gray-400 uppercase font-bold mb-0.5">Horas</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="23"
+                          value={timerInputHours}
+                          onChange={(e) => setTimerInputHours(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-11 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <span className="text-white text-xs font-bold pt-3">:</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-[8px] text-gray-400 uppercase font-bold mb-0.5">Min</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={timerInputMinutes}
+                          onChange={(e) => setTimerInputMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                          className="w-11 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <span className="text-white text-xs font-bold pt-3">:</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-[8px] text-gray-400 uppercase font-bold mb-0.5">Seg</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={timerInputSeconds}
+                          onChange={(e) => setTimerInputSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                          className="w-11 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2 pt-1 w-full">
+                      <button
+                        onClick={handleSaveCustomTimer}
+                        className="flex-1 py-1 bg-blue-600 text-white text-[11px] font-extrabold rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-sm"
+                      >
+                        Definir
+                      </button>
+                      <button
+                        onClick={() => setIsEditingTimer(false)}
+                        className="py-1 px-2 bg-gray-700 text-gray-200 text-[11px] font-bold rounded-lg hover:bg-gray-600 transition-colors cursor-pointer"
+                      >
+                        X
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="z-10 text-center cursor-pointer p-2 rounded-2xl hover:bg-blue-500/5 transition-all" onClick={() => setIsEditingTimer(true)} title="Clique para ajustar o cronômetro">
+                    <span className={`text-3xl sm:text-4xl md:text-5xl font-mono font-black tracking-tight ${
+                      darkMode ? "text-white" : "text-gray-900"
+                    }`}>
+                      {getBlockTimerState(activeDisciplina.id).formatted}
+                    </span>
+                    <p className={`text-[10px] sm:text-xs uppercase font-extrabold mt-1 tracking-wider ${
+                      isTimerRunning ? "text-emerald-500 animate-pulse" : "text-gray-400"
+                    }`}>
+                      {isTimerRunning ? "ESTUDANDO..." : "PAUSADO"}
+                    </p>
+                    <p className="text-[9px] sm:text-xs text-blue-400 font-bold mt-1 hover:underline">Ajustar Tempo (H:M:S)</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Single Core Study Controller Buttons */}
+              <div className="flex items-center space-x-3 mt-3 w-full max-w-xs px-2">
+                <button
+                  onClick={toggleTimer}
+                  className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                    isTimerRunning
+                      ? "bg-amber-500 hover:bg-amber-600 text-white"
+                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/15"
+                  }`}
+                >
+                  {isTimerRunning ? (
+                    <>
+                      <Pause className="w-3.5 h-3.5 fill-current" />
+                      <span>Pausar</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Iniciar</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={resetTimer}
+                  className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                    darkMode
+                      ? "bg-[#16223f] border-[#25365e] text-gray-300 hover:bg-[#1d2d52]"
+                      : "bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200"
+                  }`}
+                  title="Reiniciar Bloco"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const nextState = !soundEnabled;
+                    setSoundEnabled(nextState);
+                    if (nextState) {
+                      playNotificationSound('block');
+                    }
+                  }}
+                  className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                    soundEnabled
+                      ? darkMode
+                        ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/60"
+                        : "bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100"
+                      : darkMode
+                        ? "bg-[#16223f] border-[#25365e] text-gray-500 hover:bg-[#1d2d52]"
+                        : "bg-gray-100 border-gray-200 text-gray-400 hover:bg-gray-200"
+                  }`}
+                  title={soundEnabled ? "Sinal sonoro ativo (Clique para testar ou desativar)" : "Sinal sonoro desativado (Clique para ativar)"}
+                >
+                  {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Section 3: Sequência de Blocos do Ciclo */}
+          <div className="flex flex-col flex-grow">
+            <div className="flex justify-between items-center mb-3">
+              <div>
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? "text-white" : "text-gray-800"}`}>
+                  Sequência de Blocos do Ciclo
+                </h3>
+                <p className={`text-[10px] ${darkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>
+                  Clique para estudar ou ordene usando as setas.
+                </p>
+              </div>
+            </div>
+
+            {/* Scrollable container for the blocks to reduce scrolling height */}
+            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+              {orderedDisciplinas.map((d, index) => {
+                const isActive = d.id === selectedDiscId;
+                const { pct, formatted, remaining } = getBlockTimerState(d.id);
+                const qStats = getBlockQuestionStats(d);
+                const isCompleted = remaining <= 0;
+
+                return (
+                  <div
+                    key={d.id}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onClick={() => setSelectedDiscId(d.id)}
+                    className={`relative overflow-hidden p-3 rounded-xl border transition-all cursor-pointer group ${
+                      isActive
+                        ? darkMode
+                          ? "border-blue-500 bg-[#162547] shadow-lg shadow-blue-500/5"
+                          : "border-blue-600 bg-blue-50/70 shadow-sm"
+                        : darkMode
+                        ? "border-[#1e2d4d] bg-[#111e3b]/40 hover:bg-[#111e3b]/80"
+                        : "border-gray-200 bg-white hover:bg-gray-50"
+                    }`}
+                  >
+                    {/* Progress Filling Overlay */}
+                    <div 
+                      className="absolute left-0 top-0 bottom-0 transition-all duration-1000 ease-out" 
+                      style={{ 
+                        width: `${pct}%`, 
+                        backgroundColor: isCompleted ? "#10b981" : (d.cor || "#3b82f6"),
+                        opacity: darkMode ? 0.08 : 0.05
+                      }} 
+                    />
+
+                    {/* Left border active colored indicator stripe */}
+                    <div 
+                      className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+                      style={{ backgroundColor: d.cor || "#3b82f6" }}
+                    />
+
+                    {/* Top Row: Block Title & Estimated Time / Timer */}
+                    <div className="relative z-10 flex justify-between items-start">
+                      <div className="flex items-center space-x-1.5">
+                        <GripVertical className="w-3 h-3 text-gray-500 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div>
+                          <span className="text-[8px] font-bold text-blue-500 uppercase tracking-widest block">
+                            BLOCO {index + 1}
+                          </span>
+                          <h4 className={`text-xs font-bold truncate max-w-[150px] sm:max-w-[170px] ${
+                            darkMode ? "text-white" : "text-gray-900"
+                          }`}>
+                            {d.nome}
+                          </h4>
+                        </div>
+                      </div>
+
+                      <div className="text-right flex flex-col items-end">
+                        <span className={`text-[11px] font-mono font-extrabold ${
+                          isCompleted ? "text-emerald-500" : darkMode ? "text-blue-300" : "text-blue-600"
+                        }`}>
+                          {isCompleted ? "CONCLUÍDO" : formatted}
+                        </span>
+                        <span className={`text-[9px] ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                          Meta: {d.horasPorCiclo || 1}h
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar Line */}
+                    <div className="relative z-10 w-full bg-gray-200/50 dark:bg-gray-800/60 h-1.5 rounded-full overflow-hidden mt-2.5">
+                      <div 
+                        className="h-full transition-all duration-1000 ease-out rounded-full"
+                        style={{ 
+                          width: `${pct}%`,
+                          backgroundColor: isCompleted ? "#10b981" : (d.cor || "#3b82f6")
+                        }}
+                      />
+                    </div>
+
+                    {/* Bottom Row: Questions Metrics and Ordering arrows */}
+                    <div className="relative z-10 flex justify-between items-center mt-2.5 pt-1.5 border-t border-gray-100/10">
+                      <div className={`text-[9px] font-semibold uppercase tracking-wider ${
+                        darkMode ? "text-gray-400" : "text-gray-500"
+                      }`}>
+                        Questões: <span className={darkMode ? "text-white" : "text-gray-800"}>{qStats.total}</span> feitas 
+                        {qStats.total > 0 && (
+                          <span className="ml-1 text-[8px] text-emerald-500">
+                            ({qStats.acertos}A / {qStats.erros}E)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Reordering Controls */}
+                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          disabled={index === 0}
+                          type="button"
+                          onClick={() => moverBloco(index, "up")}
+                          className={`p-0.5 rounded hover:bg-gray-100/10 disabled:opacity-30 ${
+                            darkMode ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-800"
+                          }`}
+                          title="Mover para Cima"
+                        >
+                          <ChevronUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          disabled={index === orderedDisciplinas.length - 1}
+                          type="button"
+                          onClick={() => moverBloco(index, "down")}
+                          className={`p-0.5 rounded hover:bg-gray-100/10 disabled:opacity-30 ${
+                            darkMode ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-800"
+                          }`}
+                          title="Mover para Baixo"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                );
+              })}
+
+              {orderedDisciplinas.length === 0 && (
+                <p className={`text-xs text-center py-6 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Nenhuma disciplina ou bloco cadastrado neste ciclo.
+                </p>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* CONTROLE DO CONTEÚDO PROGRAMÁTICO & ASSUNTOS (COL-SPAN-7) */}
+      <div className="lg:col-span-7 space-y-6">
+        
+        <div className={`p-6 rounded-2xl border transition-colors ${
+          darkMode ? "bg-[#0f1b35] border-[#1e2d4d] text-white" : "bg-white border-gray-200 shadow-sm text-gray-800"
+        }`}>
+          
+          <div className="border-b border-gray-100/10 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-blue-500" />
+                Controle de Conteúdo Programático
+              </h3>
+              <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>
+                Tópicos programáticos do bloco ativo: <strong className="text-blue-500">{activeDisciplina?.nome || "Selecione uma matéria"}</strong>
+              </p>
+            </div>
+
+            {/* AI Analyzer toggle option */}
+            {activeDisciplina && (
+              <button
+                onClick={() => setShowAIAnalyzer(!showAIAnalyzer)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all border ${
+                  showAIAnalyzer
+                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                    : "bg-blue-600 border-transparent hover:bg-blue-700 text-white shadow-sm"
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${analyzerStatus ? "animate-spin" : ""}`} />
+                <span>{showAIAnalyzer ? "Cancelar IA" : "Organizar por Importância (IA)"}</span>
+              </button>
+            )}
+          </div>
+
+          {/* COLLAPSIBLE AREA: AI EXAM BOOKLET SCANNER */}
+          {showAIAnalyzer && activeDisciplina && (
+            <div className={`p-4 rounded-xl border mb-6 transition-all animate-fade-in ${
+              darkMode ? "bg-[#111e3c]/50 border-blue-900/40" : "bg-blue-50/40 border-blue-100"
+            }`}>
+              <div className="flex justify-between items-start mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-500 flex items-center gap-1.5">
+                  <Upload className="w-4 h-4" />
+                  ANÁLISE DE CADERNO DE PROVAS POR IA
+                </h4>
+                <button 
+                  onClick={() => setShowAIAnalyzer(false)}
+                  className={`text-xs font-bold hover:underline ${darkMode ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-800"}`}
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              <p className={`text-[11px] mb-4 ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                Anexe o arquivo em PDF ou Imagem de um caderno de prova anterior deste concurso. A inteligência artificial irá analisar quais assuntos listados foram mais exigidos e os categorizará por relevância de estudo em <strong>ALTA</strong>, <strong>MÉDIA</strong> ou <strong>BAIXA</strong> incidência.
+              </p>
+
+              <div className="space-y-4">
+                {/* File Upload Selector & Drag and Drop zone */}
+                <div className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
+                  uploadedFile 
+                    ? "border-emerald-500/50 bg-emerald-500/5" 
+                    : darkMode 
+                    ? "border-[#25365e] hover:border-blue-500/50" 
+                    : "border-gray-300 hover:border-blue-500/50"
+                }`}>
+                  <input
+                    type="file"
+                    accept="application/pdf, image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="booklet-upload"
+                  />
+                  <label htmlFor="booklet-upload" className="cursor-pointer block">
+                    <Upload className={`w-8 h-8 mx-auto mb-2 ${uploadedFile ? "text-emerald-500" : "text-gray-400"}`} />
+                    <span className="text-xs font-bold block">
+                      {uploadedFile ? uploadedFile.name : "Clique para anexar PDF ou Imagem"}
+                    </span>
+                    <span className="text-[10px] text-gray-500 block mt-1">
+                      Ou arraste o caderno de prova aqui
+                    </span>
+                  </label>
+                </div>
+
+                {/* Text Fallback Textarea option */}
+                <div>
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${darkMode ? "text-gray-400" : "text-gray-600"}`}>
+                    Ou cole as questões de prova diretamente neste campo:
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Cole aqui o texto ou questões do caderno de prova anterior para que a IA faça o rastreamento dos tópicos..."
+                    value={manualText}
+                    onChange={(e) => setManualText(e.target.value)}
+                    className={`w-full px-3 py-2 text-xs rounded-xl border outline-none resize-none transition-colors ${
+                      darkMode
+                        ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                        : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                    }`}
+                  />
+                </div>
+
+                {/* Error and processing alerts */}
+                {analyzerError && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{analyzerError}</span>
+                  </div>
+                )}
+
+                {analyzerStatus && (
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs flex items-center gap-1.5">
+                    <RefreshCw className="w-4 h-4 shrink-0 animate-spin" />
+                    <span>{analyzerStatus}</span>
+                  </div>
+                )}
+
+                {/* Start triggering action button */}
+                <button
+                  disabled={!!analyzerStatus}
+                  onClick={handleRunAIAnalysis}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Analisar com Inteligência Artificial</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* INSERÇÃO MANUAL DE NOVO TÓPICO COM INCIDÊNCIA */}
+          {activeDisciplina && (
+            <div className="p-4 rounded-xl border mb-6 grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50/30 border-gray-200/50 dark:bg-transparent dark:border-[#1e2d4d]">
+              <div className="md:col-span-6">
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Cadastrar Assunto Manualmente
+                </label>
+                <input
+                  type="text"
+                  placeholder="Nome do assunto / tópico programático"
+                  value={newTopicName}
+                  onChange={(e) => setNewTopicName(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border outline-none text-xs transition-colors ${
+                    darkMode
+                      ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                      : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                  }`}
+                />
+              </div>
+
+              <div className="md:col-span-3">
+                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Nível de Incidência
+                </label>
+                <select
+                  value={newTopicIncidencia}
+                  onChange={(e) => setNewTopicIncidencia(e.target.value as any)}
+                  className={`w-full px-3 py-2 rounded-xl border outline-none text-xs font-bold transition-colors cursor-pointer ${
+                    darkMode
+                      ? "bg-[#16223f] border-[#25365e] text-white"
+                      : "bg-white border-gray-200 text-gray-800"
+                  }`}
+                >
+                  <option value="ALTA">Alta Incidência</option>
+                  <option value="MÉDIA">Média Incidência</option>
+                  <option value="BAIXA">Baixa Incidência</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-3">
+                <button
+                  onClick={handleAddTopic}
+                  className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Cadastrar</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* DISCRETE ADVANCED FILTERS BAR */}
+          {activeDisciplina && (
+            <div className="mb-5 p-4 rounded-xl border flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-gray-50/20 dark:bg-[#16223f]/30 border-gray-200/50 dark:border-[#1e2d4d]">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-blue-500" />
+                <span className="text-xs font-bold uppercase tracking-wider">Filtros de Tópicos</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 md:max-w-2xl">
+                {/* Text Filter */}
+                <input
+                  type="text"
+                  placeholder="Pesquisar assunto..."
+                  value={filterText}
+                  onChange={(e) => setFilterText(e.target.value)}
+                  className={`px-3 py-1.5 text-xs rounded-lg border outline-none ${
+                    darkMode ? "bg-[#14203d] border-[#25365e] text-white" : "bg-white border-gray-200 text-gray-800"
+                  }`}
+                />
+
+                {/* Filter by Incidence */}
+                <select
+                  value={filterIncidencia}
+                  onChange={(e) => setFilterIncidencia(e.target.value as any)}
+                  className={`px-2 py-1.5 text-xs rounded-lg border outline-none font-semibold cursor-pointer ${
+                    darkMode ? "bg-[#14203d] border-[#25365e] text-white" : "bg-white border-gray-200 text-gray-800"
+                  }`}
+                >
+                  <option value="TODAS">Qualquer Incidência</option>
+                  <option value="ALTA">Alta Incidência</option>
+                  <option value="MÉDIA">Média Incidência</option>
+                  <option value="BAIXA">Baixa Incidência</option>
+                </select>
+
+                {/* Filter by Status */}
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value as any)}
+                  className={`px-2 py-1.5 text-xs rounded-lg border outline-none font-semibold cursor-pointer ${
+                    darkMode ? "bg-[#14203d] border-[#25365e] text-white" : "bg-white border-gray-200 text-gray-800"
+                  }`}
+                >
+                  <option value="TODOS">Todos Status</option>
+                  <option value="NÃO ESTUDADO">Não Estudado</option>
+                  <option value="ESTUDADO">Estudado</option>
+                  <option value="REVISADO">Revisado</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* LISTAGEM DE TÓPICOS PROGRAMÁTICOS COM MUDANÇA DE STATUS DIRECTA */}
+          <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
+            {filteredTopics.map((ass) => {
+              const totals = getTopicTotals(ass);
+              const isOpen = activeAssuntoId === ass.id;
+              const currentInc = ass.incidencia || "MÉDIA";
+              const currentStatus = ass.status || "NÃO ESTUDADO";
+
+              return (
+                <div
+                  key={ass.id}
+                  className={`border rounded-xl transition-all ${
+                    darkMode
+                      ? "border-[#1e2d4d] bg-[#14203e]/30 hover:bg-[#14203e]/60"
+                      : "border-gray-200 bg-gray-50/50 hover:bg-gray-50"
+                  }`}
+                >
+                  {/* HEADER ROW: Nome, Incidência, Status toggle, Lixeira e Detalhes */}
+                  <div 
+                    className="p-3.5 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 cursor-pointer"
+                    onClick={() => setActiveAssuntoId(isOpen ? null : ass.id)}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center flex-wrap gap-2">
+                        <h4 className={`text-sm font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                          {ass.nome}
+                        </h4>
+
+                        {/* Interactive Click-to-Cycle Incidence Badge */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const nextInc: "ALTA" | "MÉDIA" | "BAIXA" = 
+                              currentInc === "ALTA" ? "MÉDIA" : currentInc === "MÉDIA" ? "BAIXA" : "ALTA";
+                            handleUpdateTopic(ass.id, { incidencia: nextInc });
+                          }}
+                          className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider transition-colors ${
+                            currentInc === "ALTA"
+                              ? "bg-red-500/15 text-red-500 hover:bg-red-500/25 border border-red-500/20"
+                              : currentInc === "MÉDIA"
+                              ? "bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/20"
+                              : "bg-blue-500/15 text-blue-500 hover:bg-blue-500/25 border border-blue-500/20"
+                          }`}
+                          title="Clique para alternar o grau de incidência"
+                        >
+                          {currentInc}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center space-x-3 mt-1.5 text-xs text-gray-500 font-semibold">
+                        <span>Questões: {totals.total} resolvidas</span>
+                        {totals.total > 0 && (
+                          <span className="text-emerald-500">({totals.acertos}A / {totals.erros}E)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Interactive segmented status control */}
+                    <div className="flex items-center gap-2 self-stretch md:self-auto" onClick={(e) => e.stopPropagation()}>
+                      <div className={`flex rounded-lg p-0.5 text-[10px] font-extrabold border ${
+                        darkMode ? "bg-[#0b1328] border-gray-800" : "bg-gray-100/85 border-gray-200"
+                      }`}>
+                        {(["NÃO ESTUDADO", "ESTUDADO", "REVISADO"] as const).map((st) => (
+                          <button
+                            key={st}
+                            onClick={() => handleUpdateTopic(ass.id, { status: st })}
+                            className={`px-2 py-1 rounded-md transition-all uppercase tracking-wider ${
+                              currentStatus === st
+                                ? st === "REVISADO"
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : st === "ESTUDADO"
+                                  ? "bg-blue-600 text-white shadow-sm"
+                                  : "bg-gray-500 text-white shadow-sm"
+                                : darkMode
+                                ? "text-gray-400 hover:text-white"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            {st === "NÃO ESTUDADO" ? "NÃO ESTUDADO" : st === "ESTUDADO" ? "ESTUDADO" : "REVISADO"}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Lixeira Delete button */}
+                      <button
+                        onClick={() => handleDeleteTopic(ass.id)}
+                        className={`p-1.5 rounded-lg border transition-all ${
+                          darkMode
+                            ? "border-[#2d3f66] hover:bg-red-950/45 text-gray-400 hover:text-red-400"
+                            : "border-gray-200 hover:bg-red-50 text-gray-400 hover:text-red-600"
+                        }`}
+                        title="Excluir assunto"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                  </div>
+
+                  {/* SUBSECTION: DAILY RESOLUTION LOGS & NEW QUESTIONS REGISTER */}
+                  {isOpen && (
+                    <div className={`p-4 border-t transition-all ${
+                      darkMode ? "border-[#1e2d4d] bg-[#0b1329]/90" : "border-gray-200 bg-white"
+                    }`}>
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-xs font-bold uppercase tracking-wider text-blue-500">
+                          Registros Diários de Resolução de Questões
+                        </h5>
+                      </div>
+
+                      {/* Log Rows list */}
+                      <div className="space-y-2 mb-4 max-h-48 overflow-y-auto pr-1">
+                        {ass.registros.map((reg) => (
+                          <div
+                            key={reg.id}
+                            className={`flex justify-between items-center px-3 py-2 rounded-lg text-xs font-medium border ${
+                              darkMode 
+                                ? "bg-[#14203e]/40 border-gray-800" 
+                                : "bg-gray-50 border-gray-100"
+                            }`}
+                          >
+                            <span className="flex items-center gap-1.5 text-gray-400">
+                              <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                              {reg.data}
+                            </span>
+                            
+                            <div className="flex items-center space-x-4">
+                              <span className={darkMode ? "text-emerald-400" : "text-emerald-600"}>
+                                <strong>{reg.acertos}</strong> Acertos
+                              </span>
+                              <span className={darkMode ? "text-red-400" : "text-red-600"}>
+                                <strong>{reg.erros}</strong> Erros
+                              </span>
+                              <span className={darkMode ? "text-gray-300" : "text-gray-600"}>
+                                Total: {reg.total} q.
+                              </span>
+
+                              {/* Lixeira delete button for daily resolution entry */}
+                              <button
+                                onClick={() => handleDeleteQuestionLog(ass.id, reg.id)}
+                                className={`text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-500/10 transition-colors`}
+                                title="Excluir registro"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {ass.registros.length === 0 && (
+                          <p className={`text-xs text-center py-4 italic ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+                            Nenhum registro de questões feito para este assunto.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Register form fields */}
+                      <div className={`p-3.5 rounded-xl border grid grid-cols-1 sm:grid-cols-4 gap-3 items-end ${
+                        darkMode ? "bg-[#0e172e] border-blue-900/40" : "bg-blue-50/45 border-blue-100"
+                      }`}>
+                        <div>
+                          <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
+                            darkMode ? "text-gray-400" : "text-gray-600"
+                          }`}>
+                            Data do Estudo
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="DD/MM/AAAA"
+                            value={newLogDate}
+                            onChange={(e) => setNewLogDate(e.target.value)}
+                            className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none transition-colors ${
+                              darkMode
+                                ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                            }`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
+                            darkMode ? "text-gray-400" : "text-gray-600"
+                          }`}>
+                            Acertos
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newLogAcertos}
+                            onChange={(e) => setNewLogAcertos(Math.max(0, parseInt(e.target.value) || 0))}
+                            className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none transition-colors ${
+                              darkMode
+                                ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                            }`}
+                          />
+                        </div>
+
+                        <div>
+                          <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 ${
+                            darkMode ? "text-gray-400" : "text-gray-600"
+                          }`}>
+                            Erros
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newLogErros}
+                            onChange={(e) => setNewLogErros(Math.max(0, parseInt(e.target.value) || 0))}
+                            className={`w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none transition-colors ${
+                              darkMode
+                                ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                            }`}
+                          />
+                        </div>
+
+                        <div>
+                          <button
+                            onClick={() => handleAddQuestionLog(ass.id)}
+                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-sm flex items-center justify-center space-x-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Registrar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+
+                </div>
+              );
+            })}
+
+            {(!activeDisciplina || filteredTopics.length === 0) && (
+              <div className="text-center py-12 border border-dashed rounded-xl border-gray-200 dark:border-gray-800">
+                <FileText className="w-10 h-10 text-gray-400 mx-auto opacity-50 mb-3" />
+                <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Nenhum assunto programático encontrado para exibir.
+                </p>
+                <p className="text-[11px] text-blue-500 mt-1">
+                  Ajuste os filtros de busca acima ou cadastre um novo assunto programático!
+                </p>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* MODAL DE SINALIZAÇÃO SONORA E VISUAL (FINAL DE BLOCO E FINAL DE CICLO) */}
+      {notificationAlert && notificationAlert.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className={`relative w-full max-w-md p-6 rounded-3xl border shadow-2xl transition-all transform animate-scale-up ${
+            notificationAlert.type === 'cycle'
+              ? darkMode
+                ? "bg-[#0c1833] border-amber-500/50 text-white"
+                : "bg-white border-amber-400 text-gray-900"
+              : darkMode
+                ? "bg-[#0c1833] border-emerald-500/50 text-white"
+                : "bg-white border-emerald-400 text-gray-900"
+          }`}>
+            {/* Close button */}
+            <button
+              onClick={() => setNotificationAlert(null)}
+              className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Visual animated badge with glowing ring */}
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="relative">
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center animate-bounce ${
+                  notificationAlert.type === 'cycle'
+                    ? "bg-amber-500/20 text-amber-400 ring-8 ring-amber-500/10"
+                    : "bg-emerald-500/20 text-emerald-400 ring-8 ring-emerald-500/10"
+                }`}>
+                  {notificationAlert.type === 'cycle' ? (
+                    <Award className="w-10 h-10" />
+                  ) : (
+                    <Bell className="w-10 h-10" />
+                  )}
+                </div>
+                <span className="absolute -top-1 -right-1 flex h-5 w-5">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    notificationAlert.type === 'cycle' ? "bg-amber-400" : "bg-emerald-400"
+                  }`}></span>
+                  <span className={`relative inline-flex rounded-full h-5 w-5 ${
+                    notificationAlert.type === 'cycle' ? "bg-amber-500" : "bg-emerald-500"
+                  }`}></span>
+                </span>
+              </div>
+
+              <div>
+                <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-mono font-bold uppercase tracking-wider mb-2 ${
+                  notificationAlert.type === 'cycle'
+                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                    : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
+                }`}>
+                  {notificationAlert.type === 'cycle' ? "Conclusão do Ciclo de Estudos" : "Final de Bloco de Estudo"}
+                </span>
+                <h3 className="text-xl font-bold font-serif">
+                  {notificationAlert.title}
+                </h3>
+                <p className="text-sm font-medium mt-2 opacity-90 leading-relaxed">
+                  {notificationAlert.message}
+                </p>
+                {notificationAlert.submessage && (
+                  <p className="text-xs mt-1.5 opacity-75 font-mono">
+                    {notificationAlert.submessage}
+                  </p>
+                )}
+              </div>
+
+              {/* Controls: Replay sound chime & dismiss button */}
+              <div className="flex items-center space-x-3 w-full pt-2">
+                <button
+                  onClick={() => playNotificationSound(notificationAlert.type)}
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 border transition-all cursor-pointer ${
+                    darkMode
+                      ? "bg-white/10 hover:bg-white/20 border-white/20 text-white"
+                      : "bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-800"
+                  }`}
+                  title="Reproduzir o som de aviso novamente"
+                >
+                  <Volume2 className="w-4 h-4 text-emerald-500 animate-pulse" />
+                  <span>Ouvir Aviso Sonoro</span>
+                </button>
+
+                <button
+                  onClick={() => setNotificationAlert(null)}
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs text-white transition-all cursor-pointer shadow-lg ${
+                    notificationAlert.type === 'cycle'
+                      ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/20"
+                      : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                  }`}
+                >
+                  Continuar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

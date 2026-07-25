@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Ciclos de Estudo",
+  "description": "Um ciclo de estudos inteligente para otimização de tempo, controle de editais e planejamento automatizado para provas e concursos públicos por meio da IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
