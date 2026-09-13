@@ -325,7 +325,7 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="text-xl font-extrabold tracking-tight text-blue-500">
-                    EDITAL ATUAL: {localEdital.orgao.toUpperCase()}
+                    EDITAL ATUAL: {(localEdital.orgao || "").toUpperCase()}
                   </span>
                 </div>
                 <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>

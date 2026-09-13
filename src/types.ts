@@ -12,6 +12,9 @@ export interface Assunto {
   registros: RegistroQuestao[];
   status?: "NÃO ESTUDADO" | "ESTUDADO" | "REVISADO";
   incidencia?: "ALTA" | "MÉDIA" | "BAIXA";
+  teoria?: boolean;
+  revisao?: boolean;
+  questoes?: boolean;
 }
 
 export interface Disciplina {
@@ -152,6 +155,9 @@ export interface Metas {
   dataFinal: string; // YYYY-MM-DD
   diasImprodutivos: string[]; // datas em formato YYYY-MM-DD
   calendarOverrides: { [dateStr: string]: { productive: boolean; hours: number } }; // overrides manuais no calendário
+  dataProva?: string;
+  dataProvas?: string;
+  metaAcertosPorcentagem?: number;
 }
 
 export interface StudySession {
@@ -218,6 +224,53 @@ export interface SimuladoState {
       criterioEliminacao: string;
     };
   };
+}
+
+export interface CadernoDisciplinaMapeada {
+  nome: string;
+  questoesCount: number;
+  faixaQuestoes: string;
+  pesoSugerido?: number;
+  principaisTemas?: string[];
+}
+
+export interface CadernoConteudoCobrado {
+  disciplina: string;
+  assunto: string;
+  incidencia: "ALTA" | "MÉDIA" | "BAIXA";
+  frequenciaQuestoes: number;
+  questoesNumeros?: number[];
+  resumoCobranca?: string;
+}
+
+export interface CadernoTopicoCritico {
+  disciplina: string;
+  assunto: string;
+  motivo: string;
+  recomendacaoEstudo: string;
+  prioridade: "URGENTE" | "ALTA" | "MÉDIA";
+}
+
+export interface CadernoAjusteCarga {
+  disciplina: string;
+  acaoRecomendada: string;
+  justificativa: string;
+}
+
+export interface CadernoDiagnostico {
+  resumoGeral: string;
+  topicosCriticosMelhorar: CadernoTopicoCritico[];
+  sugestaoAjusteCargaHoraria: CadernoAjusteCarga[];
+  orientacoesSessoesEstudo: string[];
+}
+
+export interface CadernoAnalysisResult {
+  totalQuestoes: number;
+  tipoProva: string;
+  disciplinasMapeadas: CadernoDisciplinaMapeada[];
+  conteudosCobradosNoEdital: CadernoConteudoCobrado[];
+  diagnosticoProximosCiclos: CadernoDiagnostico;
+  classificacoes?: { assunto: string; incidencia: string; motivo?: string }[];
 }
 
 export interface StudyState {

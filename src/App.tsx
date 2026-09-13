@@ -3,14 +3,13 @@ import Header from "./components/Header";
 import DashboardView from "./components/DashboardView";
 import StudyView from "./components/StudyView";
 import EditalView from "./components/EditalView";
-import MetasView from "./components/MetasView";
 import PlanningView from "./components/PlanningView";
 import DiscursivaView from "./components/DiscursivaView";
 import ResumoView from "./components/ResumoView";
 import SimuladoView from "./components/SimuladoView";
 import PainelGeral from "./components/PainelGeral";
 import { StudyState, CicloEstudo, Edital } from "./types";
-import { DEFAULT_STUDY_STATE, EMPTY_STUDY_STATE } from "./utils/defaultData";
+import { DEFAULT_STUDY_STATE, EMPTY_STUDY_STATE, sanitizeCycleState } from "./utils/defaultData";
 import { THEMES, ThemeStyles } from "./utils/themeHelpers";
 
 // Firebase imports
@@ -76,16 +75,28 @@ export default function App() {
         const firestoreCycles = await getCiclosFromFirestore(user.uid);
         
         if (firestoreCycles.length > 0) {
-          // Sort cycles by id or created timestamp if possible
-          setCiclos(firestoreCycles);
+          // Sanitize mock data/sessions accumulated in cloud cycles
+          const sanitizedCycles = firestoreCycles.map(c => ({
+            ...c,
+            state: sanitizeCycleState(c.state)
+          }));
+
+          setCiclos(sanitizedCycles);
+          
+          // Save back sanitized data to Firestore if it changed
+          try {
+            await saveAllCiclosToFirestore(user.uid, sanitizedCycles);
+          } catch (e) {
+            console.error("Erro ao salvar limpeza de dados no Firestore:", e);
+          }
           
           // Try to restore user-specific active cycle ID
           const savedActiveId = localStorage.getItem(`ACTIVE_CICLO_ID_${user.uid}`);
-          const activeExists = firestoreCycles.some((c) => c.id === savedActiveId);
+          const activeExists = sanitizedCycles.some((c) => c.id === savedActiveId);
           if (activeExists && savedActiveId) {
             setActiveCicloId(savedActiveId);
           } else {
-            setActiveCicloId(firestoreCycles[0].id);
+            setActiveCicloId(sanitizedCycles[0].id);
           }
         } else {
           // No cycles on cloud yet. Check if they have legacy localStorage cycles to migrate
@@ -97,7 +108,8 @@ export default function App() {
                 console.log("Migrando ciclos de estudo locais para a nuvem...");
                 const migrated: CicloEstudo[] = parsed.map((c) => ({
                   ...c,
-                  userId: user.uid
+                  userId: user.uid,
+                  state: sanitizeCycleState(c.state)
                 }));
                 try {
                   await saveAllCiclosToFirestore(user.uid, migrated);
@@ -138,13 +150,17 @@ export default function App() {
           try {
             const parsed = JSON.parse(localSavedList);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              setCiclos(parsed);
+              const sanitizedLocal = parsed.map((c: any) => ({
+                ...c,
+                state: sanitizeCycleState(c.state)
+              }));
+              setCiclos(sanitizedLocal);
               const savedActiveId = localStorage.getItem(`ACTIVE_CICLO_ID_${user.uid}`);
-              const activeExists = parsed.some((c: any) => c.id === savedActiveId);
+              const activeExists = sanitizedLocal.some((c: any) => c.id === savedActiveId);
               if (activeExists && savedActiveId) {
                 setActiveCicloId(savedActiveId);
               } else {
-                setActiveCicloId(parsed[0].id);
+                setActiveCicloId(sanitizedLocal[0].id);
               }
               setIsSyncing(false);
               return;
@@ -336,37 +352,61 @@ export default function App() {
     setIsSyncing(false);
   };
 
-  // Clear all study records/sessions/subjects in a cycle without deleting it
+  // State to force view remount on cycle reset/clear
+  const [resetCounter, setResetCounter] = useState(0);
+
+  // Clear all data completely & unrestrictedly in a cycle (EDITAL, RESUMO, METAS, PLANEJAMENTO, ESTUDAR, DISCURSIVA, SIMULADO)
   const handleLimparCiclo = async (targetId?: string) => {
-    if (!user) return;
     const cycleIdToClean = targetId || activeCicloId;
     if (!cycleIdToClean) return;
 
     const targetCycle = ciclos.find((c) => c.id === cycleIdToClean);
     if (!targetCycle) return;
 
+    const confirmClear = window.confirm(
+      `⚠️ EXCLUSÃO COMPLETA E IRRESTRITA DO CICLO:\n\n` +
+      `Deseja apagar TOTALMENTE todas as informações do ciclo "${targetCycle.orgao}"?\n\n` +
+      `Esta ação zerará e apagará irrestritamente:\n` +
+      `• EDITAL: Todas as categorias, disciplinas, questões e conteúdos do edital;\n` +
+      `• ESTUDAR: Todas as sessões de estudo, horas e cronômetros;\n` +
+      `• RESUMO: Todas as anotações, status e tópicos concluídos;\n` +
+      `• METAS & PLANEJAMENTO: Todas as horas configuradas e planejamentos;\n` +
+      `• DISCURSIVA & SIMULADO: Todo o histórico de redações e notas;\n` +
+      `• Reiniciará o contador para o Ciclo nº 1.\n\n` +
+      `O ciclo continuará ativo na página para que você possa preencher todas as informações do zero.`
+    );
+    if (!confirmClear) return;
+
     const resetState: StudyState = {
       edital: {
-        banca: targetCycle.state?.edital?.banca || "A Definir",
-        orgao: targetCycle.orgao,
-        cargo: targetCycle.cargoDesejado,
-        categorias: [],
-        discursivaInfo: {
-          hasDiscursiva: false,
-          detalhes: "Ainda não cadastrado",
-          criteriosAvaliacao: "Ainda não cadastrado",
-        },
+        banca: "A Definir",
+        orgao: targetCycle.orgao || "",
+        cargo: targetCycle.cargoDesejado || "",
+        categorias: []
       },
       metas: {
-        horasDisponiveis: { "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0 },
+        horasDisponiveis: {
+          "0": 0,
+          "1": 0,
+          "2": 0,
+          "3": 0,
+          "4": 0,
+          "5": 0,
+          "6": 0
+        },
         dataInicial: new Date().toISOString().split("T")[0],
         dataFinal: "",
         diasImprodutivos: [],
-        calendarOverrides: {},
+        calendarOverrides: {}
       },
       currentCycle: 1,
       sessions: [],
       discursivas: [],
+      simulados: {
+        historico: [],
+        metaAproveitamento: 80,
+        criteriosPorCargo: {}
+      }
     };
 
     const cleanedCycle: CicloEstudo = {
@@ -374,14 +414,39 @@ export default function App() {
       state: resetState,
     };
 
+    // Remove stored active discipline / timer / order / checked keys in localStorage
+    Object.keys(localStorage).forEach((key) => {
+      if (
+        key.includes("study_") ||
+        key.includes("timer_") ||
+        key.includes("disc_") ||
+        key.includes("resumo_") ||
+        key.includes("ciclo_order") ||
+        key.includes("dashboard_") ||
+        key.includes("block_")
+      ) {
+        localStorage.removeItem(key);
+      }
+    });
+
     const updatedCiclos = ciclos.map((c) => (c.id === cycleIdToClean ? cleanedCycle : c));
     setCiclos(updatedCiclos);
+    localStorage.setItem("LISTA_CICLOS_ESTUDO", JSON.stringify(updatedCiclos));
+    setResetCounter((prev) => prev + 1);
 
-    try {
-      await saveCicloToFirestore(user.uid, cleanedCycle);
-      alert(`O ciclo "${targetCycle.orgao}" foi limpo com sucesso! Todas as informações e matérias foram completamente zeradas.`);
-    } catch (err) {
-      console.error("Erro ao salvar ciclo limpo no Firestore:", err);
+    if (user) {
+      setIsSyncing(true);
+      try {
+        await saveCicloToFirestore(user.uid, cleanedCycle);
+        alert(`✅ Todas as informações do ciclo "${targetCycle.orgao}" foram excluídas completamente! O ciclo continuará ativo na página para preenchimento do zero.`);
+      } catch (err) {
+        console.error("Erro ao salvar ciclo limpo no Firestore:", err);
+        alert("✅ Todas as informações do ciclo foram excluídas localmente com sucesso!");
+      } finally {
+        setIsSyncing(false);
+      }
+    } else {
+      alert(`✅ Todas as informações do ciclo "${targetCycle.orgao}" foram excluídas completamente! O ciclo continuará ativo na página para preenchimento do zero.`);
     }
   };
 
@@ -410,7 +475,7 @@ export default function App() {
   };
 
   // Select a cycle from Painel Geral
-  const handleSelectCiclo = (id: string, activeTabSelection?: "dashboard" | "estudar" | "planejamento" | "edital") => {
+  const handleSelectCiclo = (id: string, activeTabSelection?: "dashboard" | "estudar" | "planejamento" | "edital" | "discursiva" | "simulado" | "resumo") => {
     setActiveCicloId(id);
     setViewMode("ciclo");
     if (activeTabSelection) {
@@ -420,18 +485,51 @@ export default function App() {
     }
   };
 
+  // Update a specific cycle's state directly from Painel Geral (e.g. from Simulado tab)
+  const handleUpdateCicloState = async (cicloId: string, newState: StudyState) => {
+    const updatedCiclos = ciclos.map((c) => {
+      if (c.id === cicloId) {
+        return {
+          ...c,
+          orgao: newState.edital?.orgao || c.orgao,
+          cargoDesejado: newState.edital?.cargo || c.cargoDesejado,
+          state: newState,
+        };
+      }
+      return c;
+    });
+    setCiclos(updatedCiclos);
+
+    if (user) {
+      const targetCycle = updatedCiclos.find((c) => c.id === cicloId);
+      if (targetCycle) {
+        try {
+          await saveCicloToFirestore(user.uid, targetCycle);
+        } catch (err) {
+          console.error("Erro ao sincronizar ciclo com Firestore:", err);
+        }
+      }
+    }
+  };
+
   // Sync everything manual trigger
   const handleSyncAll = async () => {
-    if (!user) return;
-    setIsSyncing(true);
-    try {
-      await saveAllCiclosToFirestore(user.uid, ciclos);
-      alert("Sincronização concluída! Todos os dados de todos os seus ciclos foram salvos em segurança na nuvem.");
-    } catch (err) {
-      console.error("Erro de sincronização manual:", err);
-      alert("Falha ao sincronizar dados com o servidor de nuvem.");
-    } finally {
-      setIsSyncing(false);
+    if (ciclos.length > 0) {
+      localStorage.setItem("LISTA_CICLOS_ESTUDO", JSON.stringify(ciclos));
+    }
+    if (user) {
+      setIsSyncing(true);
+      try {
+        await saveAllCiclosToFirestore(user.uid, ciclos);
+        alert("✅ Sincronização concluída! Todos os dados de todos os ciclos foram salvos e atualizados em tempo real na nuvem e no aplicativo.");
+      } catch (err) {
+        console.error("Erro de sincronização manual:", err);
+        alert("Sincronização salva localmente! Não foi possível enviar para a nuvem neste momento.");
+      } finally {
+        setIsSyncing(false);
+      }
+    } else {
+      alert("✅ Sincronização local concluída! Todos os dados e gráficos foram recalculados e salvos no navegador.");
     }
   };
 
@@ -463,6 +561,7 @@ export default function App() {
         onExcluirCiclo={handleExcluirCiclo}
         onLimparCiclo={handleLimparCiclo}
         onCriarCiclo={handleCriarCiclo}
+        onUpdateCicloState={handleUpdateCicloState}
         currentTheme={currentTheme}
         setCurrentTheme={setCurrentTheme}
         darkMode={darkMode}
@@ -502,68 +601,65 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* ACTIVE VIEW CHANGER */}
-        {activeTab === "dashboard" && (
-          <DashboardView
-            state={state}
-            darkMode={darkMode}
-          />
-        )}
+        <div key={`view_container_${activeTab}_${activeCicloId}_${resetCounter}`} className="w-full">
+          {activeTab === "dashboard" && (
+            <DashboardView
+              state={state}
+              darkMode={darkMode}
+              onNavigateTab={(tab: string) => setActiveTab(tab as any)}
+              onSyncAll={handleSyncAll}
+              isSyncing={isSyncing}
+            />
+          )}
 
-        {activeTab === "estudar" && (
-          <StudyView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
+          {activeTab === "estudar" && (
+            <StudyView
+              state={state}
+              updateState={handleUpdateState}
+              darkMode={darkMode}
+            />
+          )}
 
-        {activeTab === "edital" && (
-          <EditalView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
+          {activeTab === "edital" && (
+            <EditalView
+              state={state}
+              updateState={handleUpdateState}
+              darkMode={darkMode}
+            />
+          )}
 
-        {activeTab === "metas" && (
-          <MetasView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
+          {(activeTab === "planejamento" || (activeTab as string) === "metas") && (
+            <PlanningView
+              state={state}
+              updateState={handleUpdateState}
+              darkMode={darkMode}
+            />
+          )}
 
-        {activeTab === "planejamento" && (
-          <PlanningView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
+          {activeTab === "discursiva" && (
+            <DiscursivaView
+              state={state}
+              updateState={handleUpdateState}
+              darkMode={darkMode}
+            />
+          )}
 
-        {activeTab === "discursiva" && (
-          <DiscursivaView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
+          {activeTab === "resumo" && (
+            <ResumoView
+              state={state}
+              updateState={handleUpdateState}
+              darkMode={darkMode}
+            />
+          )}
 
-        {activeTab === "resumo" && (
-          <ResumoView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
-
-        {activeTab === "simulado" && (
-          <SimuladoView
-            state={state}
-            updateState={handleUpdateState}
-            darkMode={darkMode}
-          />
-        )}
+          {activeTab === "simulado" && (
+            <SimuladoView
+              state={state}
+              updateState={handleUpdateState}
+              darkMode={darkMode}
+            />
+          )}
+        </div>
 
       </main>
 

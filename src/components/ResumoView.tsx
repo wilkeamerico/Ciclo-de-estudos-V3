@@ -663,391 +663,481 @@ export function ResumoView({ state, updateState, darkMode }: ResumoViewProps) {
   };
 
   return (
-    <div className={`min-h-screen font-sans ${darkMode ? "bg-[#0b1329] text-gray-100" : "bg-[#EEF1F0] text-[#152521]"} transition-colors pb-20`}>
+    <div className="space-y-6 animate-fade-in font-sans">
+      
       {/* ------------------------------------------------------------------- */}
-      {/* MASTHEAD (Dossiê do Candidato) */}
+      {/* HEADER CARD */}
       {/* ------------------------------------------------------------------- */}
-      <header className={`border-b-2 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-[#152521]"} px-4 sm:px-8 py-5 transition-colors`}>
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="space-y-2">
-            <span className="font-mono text-xs font-semibold uppercase tracking-widest text-[#0E6E62]">
+      <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+        darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-400">
               Edital {edital.orgao || "001/2026"} · Banca {edital.banca || "FGV"}
             </span>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl sm:text-4xl font-serif font-bold tracking-tight">
-                Dossiê do Candidato
-              </h1>
-              <button
-                onClick={() => setShowScanModal(true)}
-                className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
-                title="Escanear edital PDF ou colar texto para atualizar este resumo e as matérias via IA"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                <span>Escanear Edital por IA</span>
-              </button>
+            <div className="flex items-center space-x-2">
+              <FileText className="w-6 h-6 text-blue-500 shrink-0" />
+              <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${darkMode ? "text-white" : "text-gray-900"}`}>
+                Dossiê do Candidato & Resumo do Edital
+              </h2>
             </div>
-
-            {/* Cargo Cadastrado display right below Dossiê do Candidato */}
-            <div className="flex items-center gap-2 pt-2 pb-1 flex-wrap">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-[#0E6E62] dark:text-emerald-300">
-                <Briefcase className="w-4 h-4 shrink-0 text-[#0E6E62] dark:text-emerald-400" />
-                <span className="font-mono text-xs font-bold uppercase tracking-wider">
-                  Cargo Cadastrado:
-                </span>
-                <span className="font-serif text-sm sm:text-base font-bold ml-0.5 text-gray-900 dark:text-white">
-                  {currentCargo.cargoName}
-                </span>
-              </div>
-              {resumoData.cargos.length > 1 && (
-                <div className="flex items-center gap-1.5 ml-2">
-                  <span className="text-xs text-gray-500 font-mono">Alternar cargo:</span>
-                  {resumoData.cargos.map((c, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setSelectedCargoIdx(idx)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
-                        selectedCargoIdx === idx
-                          ? "bg-[#0E6E62] text-white border-[#0E6E62]"
-                          : "bg-transparent text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-[#0E6E62]"
-                      }`}
-                    >
-                      {c.cargoName}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <p className={`text-xs sm:text-sm max-w-3xl ${darkMode ? "text-gray-300" : "text-[#465650]"}`}>
+            <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} leading-relaxed max-w-3xl`}>
               Painel interativo do concurso público — consulte requisitos, cronograma, vagas e conteúdo programático correspondentes ao seu cargo.
             </p>
           </div>
 
-          {/* Rubber Stamp Badge */}
-          <div className="relative shrink-0 flex items-center justify-center">
-            <div className={`w-24 h-24 rounded-full border-2 border-[#B5482F] p-1 flex flex-col items-center justify-center text-center -rotate-12 select-none opacity-85 font-mono text-[10px] uppercase font-bold text-[#B5482F] shadow-sm`}>
-              <div className="border border-[#B5482F] rounded-full w-full h-full flex flex-col items-center justify-center leading-tight">
-                <span>CONCURSO</span>
-                <span className="text-xs font-black">PÚBLICO</span>
-                <span>2026</span>
-              </div>
+          <button
+            onClick={() => setShowScanModal(true)}
+            className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md hover:shadow-lg cursor-pointer shrink-0"
+            title="Escanear edital PDF ou colar texto para atualizar este resumo e as matérias via IA"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Escanear Edital por IA</span>
+          </button>
+        </div>
+
+        {/* CARGO SELECTOR & BADGE BAR */}
+        <div className="pt-2 flex flex-wrap items-center gap-3 border-t border-gray-200/10">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+            <Briefcase className="w-4 h-4 shrink-0" />
+            <span>Cargo Cadastrado:</span>
+            <span className="text-gray-900 dark:text-white font-extrabold ml-1">
+              {currentCargo.cargoName}
+            </span>
+          </div>
+
+          {resumoData.cargos.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400 font-medium mr-1">Alternar cargo:</span>
+              {resumoData.cargos.map((c, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedCargoIdx(idx)}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all border ${
+                    selectedCargoIdx === idx
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : darkMode
+                      ? "bg-[#162447] text-gray-300 border-[#22335c] hover:border-blue-500"
+                      : "bg-gray-100 text-gray-700 border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  {c.cargoName}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* CARGO SUMMARY METRICS CARD */}
+      {/* ------------------------------------------------------------------- */}
+      <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+        darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+      }`}>
+        <div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-blue-500">
+            Grupo: {currentCargo.grupo || currentCargo.visaoGeral.orgao}
+          </span>
+          <h3 className={`text-lg font-black tracking-tight ${darkMode ? "text-white" : "text-gray-900"}`}>
+            {currentCargo.cargoName}
+          </h3>
+          <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} mt-1`}>
+            <strong>Requisitos:</strong> {currentCargo.visaoGeral.escolaridadeRequisitos}
+          </p>
+        </div>
+
+        {/* STATS GRID */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
+          <div className={`p-3.5 rounded-xl border text-center ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+            <div className="text-2xl font-black text-blue-500">{totals.imediatas}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-0.5">Vagas Imediatas</div>
+          </div>
+          <div className={`p-3.5 rounded-xl border text-center ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+            <div className="text-2xl font-black text-indigo-500">{totals.cr}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-0.5">Cadastro Reserva</div>
+          </div>
+          <div className={`p-3.5 rounded-xl border text-center ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+            <div className="text-2xl font-black text-emerald-500">{totals.total}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-0.5">Total Geral</div>
+          </div>
+          <div className={`p-3.5 rounded-xl border text-center ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+            <div className="text-sm font-black text-amber-500 mt-1">{currentCargo.visaoGeral.cargaHoraria}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-1">Carga Horária</div>
+          </div>
+          <div className={`p-3.5 rounded-xl border text-center ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+            <div className="text-xs font-black text-emerald-400 mt-1 leading-tight">{currentCargo.visaoGeral.remuneracaoInicial}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mt-1">Remuneração</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* NAVIGATION TABS */}
+      {/* ------------------------------------------------------------------- */}
+      <div className={`flex items-center gap-2 overflow-x-auto p-1.5 rounded-2xl border ${
+        darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+      }`}>
+        {[
+          { id: "visao", label: "Visão Geral & Dados" },
+          { id: "cronograma", label: "Cronograma do Concurso" },
+          { id: "prova", label: "Prova & Critérios de Aprovação" },
+          { id: "conteudo", label: `Conteúdo Verticalizado (${topicStats.percent}%)` }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+              activeTab === tab.id
+                ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                : darkMode
+                ? "text-gray-400 hover:text-white hover:bg-white/5"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TAB 1: VISÃO GERAL */}
+      {/* ------------------------------------------------------------------- */}
+      {activeTab === "visao" && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Identificação do certame */}
+          <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+              <Building2 className="w-5 h-5 text-blue-500" />
+              Identificação do Certame & Dados do Concurso
+            </h3>
+            
+            <div className={`overflow-x-auto rounded-xl border ${darkMode ? "border-[#1e2d4d]" : "border-gray-200"}`}>
+              <table className="w-full text-xs text-left">
+                <tbody className={`divide-y ${darkMode ? "divide-[#1e2d4d]" : "divide-gray-100"}`}>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold w-52 ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Órgão / Entidade</td>
+                    <td className={`py-3 px-4 ${darkMode ? "text-gray-200" : "text-gray-900"}`}>{renderValue(currentCargo.visaoGeral.orgao)}</td>
+                  </tr>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Banca Organizadora</td>
+                    <td className={`py-3 px-4 ${darkMode ? "text-gray-200" : "text-gray-900"}`}>{renderValue(currentCargo.visaoGeral.banca)}</td>
+                  </tr>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Cargo Analisado</td>
+                    <td className={`py-3 px-4 ${darkMode ? "text-gray-200" : "text-gray-900"}`}>{renderValue(currentCargo.visaoGeral.cargoAnalisado)}</td>
+                  </tr>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Escolaridade / Requisitos</td>
+                    <td className={`py-3 px-4 ${darkMode ? "text-gray-200" : "text-gray-900"}`}>{renderValue(currentCargo.visaoGeral.escolaridadeRequisitos)}</td>
+                  </tr>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Carga Horária Semanal</td>
+                    <td className={`py-3 px-4 ${darkMode ? "text-gray-200" : "text-gray-900"}`}>{renderValue(currentCargo.visaoGeral.cargaHoraria)}</td>
+                  </tr>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Remuneração Inicial</td>
+                    <td className="py-3 px-4 font-bold text-emerald-500">{renderValue(currentCargo.visaoGeral.remuneracaoInicial)}</td>
+                  </tr>
+                  <tr className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                    <td className={`py-3 px-4 font-bold ${darkMode ? "text-gray-300" : "text-gray-700"}`}>Total de Vagas (Perfil)</td>
+                    <td className={`py-3 px-4 ${darkMode ? "text-gray-200" : "text-gray-900"}`}>
+                      {totals.imediatas} imediatas + {totals.cr} em cadastro de reserva = <strong className="text-blue-500">{totals.total} vagas totais</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Inscrições e Isenção */}
+          <div className={`p-6 rounded-2xl border transition-colors space-y-3 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+              <DollarSign className="w-5 h-5 text-amber-500" />
+              Inscrições & Isenção de Taxa
+            </h3>
+            <div className={`p-4 rounded-xl border text-xs space-y-2.5 ${darkMode ? "bg-[#162447] border-[#22335c] text-gray-300" : "bg-slate-50 border-gray-200 text-gray-700"}`}>
+              <p><strong>Taxa de Inscrição:</strong> <span className="font-mono text-amber-500 font-bold">{currentCargo.inscricoesIsencao.valorTaxa}</span></p>
+              <p><strong>Site Oficial da Banca:</strong> <a href={currentCargo.inscricoesIsencao.siteBanca.startsWith("http") ? currentCargo.inscricoesIsencao.siteBanca : "#"} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline font-medium inline-flex items-center gap-1">{currentCargo.inscricoesIsencao.siteBanca} <ExternalLink className="w-3 h-3" /></a></p>
+              <p><strong>Regras de Isenção:</strong> {currentCargo.inscricoesIsencao.regrasIsencao}</p>
+            </div>
+          </div>
+
+          {/* Reserva de Vagas (Cotas Globais) */}
+          <div className={`p-6 rounded-2xl border transition-colors space-y-3 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+              <Shield className="w-5 h-5 text-indigo-500" />
+              Reserva de Vagas (Cotas Globais)
+            </h3>
+            <div className={`p-4 rounded-xl border text-xs space-y-2 ${darkMode ? "bg-[#162447] border-[#22335c] text-gray-300" : "bg-slate-50 border-gray-200 text-gray-700"}`}>
+              <p>Do total de vagas ofertadas: <strong>5% no mínimo</strong> para pessoas com deficiência (PcD) e <strong>30%</strong> para negros (pretos e pardos), indígenas e quilombolas conforme legislação federal vigente.</p>
+              <p className="text-gray-400 italic">Candidatos de cotas concorrem simultaneamente às vagas reservadas e à ampla concorrência.</p>
             </div>
           </div>
         </div>
-      </header>
+      )}
 
       {/* ------------------------------------------------------------------- */}
-      {/* MAIN REDISTRIBUTED FULL-WIDTH CONTENT */}
+      {/* TAB 2: CRONOGRAMA */}
       {/* ------------------------------------------------------------------- */}
-      <main className="max-w-7xl mx-auto p-4 sm:p-8 space-y-6">
-          {/* CARGO HEADER BOX */}
-          <div className={`p-5 sm:p-6 border-2 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-[#152521]"} rounded shadow-sm space-y-3`}>
-            <div className="font-mono text-xs uppercase tracking-wider font-bold text-[#0E6E62]">
-              Cargo: {currentCargo.grupo || currentCargo.visaoGeral.orgao}
+      {activeTab === "cronograma" && (
+        <div className="space-y-6 animate-fade-in">
+          <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200/10 pb-3">
+              <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+                <Calendar className="w-5 h-5 text-blue-500" />
+                Calendário Completo do Certame
+              </h3>
+              <div className="flex items-center gap-3 text-[10px] font-mono font-bold">
+                <span className="text-emerald-500">● VERDE: Não iniciou</span>
+                <span className="text-amber-500">● AMARELO: Na data</span>
+                <span className="text-red-500">● VERMELHO: Passou</span>
+              </div>
             </div>
-            <h2 className="text-xl sm:text-2xl font-serif font-bold text-gray-900 dark:text-white">
-              {currentCargo.cargoName}
-            </h2>
-            <p className={`text-xs sm:text-sm ${darkMode ? "text-gray-300" : "text-[#465650]"}`}>
-              <strong>Requisitos:</strong> {currentCargo.visaoGeral.escolaridadeRequisitos}
-            </p>
 
-            {/* Stat Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-4 border-t border-gray-200/20 text-center">
-              <div className="p-2 border-r border-gray-200/20 last:border-none">
-                <div className="font-mono text-lg font-bold text-[#0E6E62]">{totals.imediatas}</div>
-                <div className="text-[10px] uppercase tracking-wider text-[#7C8B85]">Vagas imediatas</div>
-              </div>
-              <div className="p-2 border-r border-gray-200/20 last:border-none">
-                <div className="font-mono text-lg font-bold text-[#0E6E62]">{totals.cr}</div>
-                <div className="text-[10px] uppercase tracking-wider text-[#7C8B85]">Cadastro reserva</div>
-              </div>
-              <div className="p-2 border-r border-gray-200/20 last:border-none">
-                <div className="font-mono text-lg font-bold text-[#0E6E62]">{totals.total}</div>
-                <div className="text-[10px] uppercase tracking-wider text-[#7C8B85]">Total geral</div>
-              </div>
-              <div className="p-2 border-r border-gray-200/20 last:border-none">
-                <div className="font-mono text-xs font-bold text-[#0E6E62] mt-1">{currentCargo.visaoGeral.cargaHoraria}</div>
-                <div className="text-[10px] uppercase tracking-wider text-[#7C8B85]">Carga horária</div>
-              </div>
-              <div className="p-2">
-                <div className="font-mono text-xs font-bold text-[#0E6E62] mt-1">{currentCargo.visaoGeral.remuneracaoInicial}</div>
-                <div className="text-[10px] uppercase tracking-wider text-[#7C8B85]">Remuneração</div>
-              </div>
+            <div className="space-y-2">
+              <ul className={`divide-y text-xs ${darkMode ? "divide-[#1e2d4d]" : "divide-gray-100"}`}>
+                {resumoData.calendario.map((ev, idx) => {
+                  const st = getEventStatus(ev.dataStr);
+                  return (
+                    <li key={idx} className={`py-3.5 px-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl transition-colors ${darkMode ? "hover:bg-white/5" : "hover:bg-gray-50"}`}>
+                      <div className="space-y-1">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${st.badgeClass} mb-1`}>
+                          {st.cor}
+                        </span>
+                        <p className={`font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>{ev.evento}</p>
+                        {ev.detalhes && <p className={`text-[11px] ${darkMode ? "text-gray-400" : "text-gray-500"}`}>{ev.detalhes}</p>}
+                      </div>
+                      <span className="font-mono font-bold text-blue-500 text-xs shrink-0">{ev.dataStr}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------- */}
+      {/* TAB 3: PROVA & APROVAÇÃO */}
+      {/* ------------------------------------------------------------------- */}
+      {activeTab === "prova" && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Estrutura da Prova Objetiva */}
+          <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+              <CheckCircle2 className="w-5 h-5 text-blue-500" />
+              Estrutura da Prova Objetiva
+            </h3>
+            <div className={`p-4 rounded-xl border text-xs space-y-2 ${darkMode ? "bg-[#162447] border-[#22335c] text-gray-300" : "bg-slate-50 border-gray-200 text-gray-700"}`}>
+              <p><strong>Data & Horário:</strong> {currentCargo.provaObjetiva.dataHorarioTurno}</p>
+              <p><strong>Formato:</strong> {currentCargo.provaObjetiva.estruturaQuestoes}</p>
+              <p><strong>Penalidade por Erro:</strong> {currentCargo.provaObjetiva.penalidadeErro}</p>
+              <p><strong>Critérios de Eliminação:</strong> {currentCargo.provaObjetiva.criteriosEliminacao}</p>
             </div>
           </div>
 
-          {/* TAB NAVIGATION BUTTONS */}
-          <nav className="flex items-center gap-1 overflow-x-auto border-b-2 border-[#152521] pb-0 scrollbar-none">
-            {[
-              { id: "visao", label: "Visão geral" },
-              { id: "cronograma", label: "Cronograma" },
-              { id: "prova", label: "Prova & aprovação" },
-              { id: "conteudo", label: `Conteúdo (${topicStats.percent}%)` }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-xs font-bold whitespace-nowrap border-b-4 transition-all -mb-[2px] ${
-                  activeTab === tab.id
-                    ? "border-[#0E6E62] text-[#0A4F47] dark:text-emerald-300 font-extrabold"
-                    : "border-transparent text-[#465650] dark:text-gray-400 hover:text-gray-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 1: VISÃO GERAL */}
-          {/* ----------------------------------------------------------------- */}
-          {activeTab === "visao" && (
-            <div className="space-y-6 animate-fade">
-              <div className="space-y-2">
-                <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Identificação do certame</h3>
-                <div className={`p-4 rounded border ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                  <table className="w-full text-xs text-left divide-y divide-gray-200/20">
-                    <tbody>
-                      <tr><td className="py-2 font-bold w-48">Órgão / Entidade</td><td>{renderValue(currentCargo.visaoGeral.orgao)}</td></tr>
-                      <tr><td className="py-2 font-bold">Banca organizadora</td><td>{renderValue(currentCargo.visaoGeral.banca)}</td></tr>
-                      <tr><td className="py-2 font-bold">Cargo analisado</td><td>{renderValue(currentCargo.visaoGeral.cargoAnalisado)}</td></tr>
-                      <tr><td className="py-2 font-bold">Escolaridade / requisitos</td><td>{renderValue(currentCargo.visaoGeral.escolaridadeRequisitos)}</td></tr>
-                      <tr><td className="py-2 font-bold">Carga horária semanal</td><td>{renderValue(currentCargo.visaoGeral.cargaHoraria)}</td></tr>
-                      <tr><td className="py-2 font-bold">Remuneração inicial</td><td className="font-bold text-[#0E6E62]">{renderValue(currentCargo.visaoGeral.remuneracaoInicial)}</td></tr>
-                      <tr><td className="py-2 font-bold">Total de vagas (perfil)</td><td>{totals.imediatas} imediatas + {totals.cr} em cadastro de reserva = <strong>{totals.total} vagas totais</strong></td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Inscrições e Isenção</h3>
-                <div className={`p-4 rounded border text-xs space-y-2 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                  <p><strong>Taxa de inscrição:</strong> <span className="font-mono text-amber-600 font-bold">{currentCargo.inscricoesIsencao.valorTaxa}</span></p>
-                  <p><strong>Site da Banca:</strong> <a href={currentCargo.inscricoesIsencao.siteBanca.startsWith("http") ? currentCargo.inscricoesIsencao.siteBanca : "#"} target="_blank" rel="noreferrer" className="text-blue-500 underline">{currentCargo.inscricoesIsencao.siteBanca}</a></p>
-                  <p><strong>Regras de Isenção:</strong> {currentCargo.inscricoesIsencao.regrasIsencao}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Reserva de Vagas (Cotas Globais)</h3>
-                <div className={`p-4 rounded border text-xs space-y-2 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                  <p>Do total de vagas ofertadas: <strong>5% no mínimo</strong> para pessoas com deficiência (PcD) e <strong>30%</strong> para negros (pretos e pardos), indígenas e quilombolas conforme legislação federal vigente.</p>
-                  <p className="text-gray-500 italic">Candidatos de cotas concorrem simultaneamente às vagas reservadas e à ampla concorrência.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 2: CRONOGRAMA */}
-          {/* ----------------------------------------------------------------- */}
-          {activeTab === "cronograma" && (
-            <div className="space-y-6 animate-fade">
-              <div className="flex items-center justify-between border-b border-gray-300 pb-1">
-                <h3 className="font-serif text-lg font-bold">Calendário Completo do Certame</h3>
-                <div className="flex gap-3 text-[10px] font-mono font-bold">
-                  <span className="text-emerald-500">● VERDE: Não iniciou</span>
-                  <span className="text-amber-500">● AMARELO: Na data</span>
-                  <span className="text-red-500">● VERMELHO: Passou</span>
-                </div>
-              </div>
-
-              <div className={`p-4 rounded border ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                <ul className="divide-y divide-gray-200/20 text-xs">
-                  {resumoData.calendario.map((ev, idx) => {
-                    const st = getEventStatus(ev.dataStr);
-                    return (
-                      <li key={idx} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${st.badgeClass} mb-1`}>
-                            {st.cor}
-                          </span>
-                          <p className="font-bold text-gray-900 dark:text-white">{ev.evento}</p>
-                          {ev.detalhes && <p className="text-gray-500 text-[11px]">{ev.detalhes}</p>}
-                        </div>
-                        <span className="font-mono font-bold text-blue-500 text-xs shrink-0">{ev.dataStr}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 3: PROVA & APROVAÇÃO */}
-          {/* ----------------------------------------------------------------- */}
-          {activeTab === "prova" && (
-            <div className="space-y-6 animate-fade">
-              <div className="space-y-2">
-                <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Estrutura da Prova Objetiva</h3>
-                <div className={`p-4 rounded border text-xs space-y-2 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                  <p><strong>Data & Horário:</strong> {currentCargo.provaObjetiva.dataHorarioTurno}</p>
-                  <p><strong>Formato:</strong> {currentCargo.provaObjetiva.estruturaQuestoes}</p>
-                  <p><strong>Penalidade por Erro:</strong> {currentCargo.provaObjetiva.penalidadeErro}</p>
-                  <p><strong>Critérios de Eliminação:</strong> {currentCargo.provaObjetiva.criteriosEliminacao}</p>
-                </div>
-              </div>
-
-              {/* Table of Disciplines */}
-              <div className="space-y-2">
-                <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Distribuição de Disciplinas e Pontuação</h3>
-                <div className="overflow-x-auto border border-gray-300 rounded">
-                  <table className="w-full text-xs text-left">
-                    <thead className={`uppercase font-mono text-[10px] border-b ${darkMode ? "bg-[#0b1329] text-gray-400 border-[#1e2d4d]" : "bg-gray-100 text-gray-600 border-gray-300"}`}>
-                      <tr>
-                        <th className="p-2">Disciplina / Módulo</th>
-                        <th className="p-2 text-center">Nº Questões</th>
-                        <th className="p-2 text-center">Peso</th>
-                        <th className="p-2 text-center">Pontuação Máx</th>
-                        <th className="p-2">Corte / Mínimo</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200/20">
-                      {currentCargo.provaObjetiva.distribuicaoDisciplinas.map((d, i) => (
-                        <tr key={i}>
-                          <td className="p-2 font-bold">{d.disciplinaOuBloco}</td>
-                          <td className="p-2 text-center font-mono font-bold text-blue-500">{d.numQuestoes}</td>
-                          <td className="p-2 text-center font-mono font-bold text-purple-500">{d.peso}</td>
-                          <td className="p-2 text-center font-mono font-bold text-emerald-500">{d.pontuacaoMaxima}</td>
-                          <td className="p-2 font-semibold text-amber-600">{d.notaMinimaOuCorte}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Prova Discursiva section */}
-              {currentCargo.provaDiscursiva.temDiscursiva && (
-                <div className="space-y-2">
-                  <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Prova Discursiva / Redação</h3>
-                  <div className={`p-4 rounded border text-xs space-y-2 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                    <p><strong>Formato:</strong> {currentCargo.provaDiscursiva.formato}</p>
-                    <p><strong>Extensão:</strong> {currentCargo.provaDiscursiva.extensao}</p>
-                    <p><strong>Discursivas Corrigidas:</strong> {currentCargo.provaDiscursiva.numDiscursivasCorrigidas}</p>
-                    <p><strong>Critérios de Avaliação:</strong> {currentCargo.provaDiscursiva.criteriosPontuacao}</p>
-                    <p><strong>Nota Mínima:</strong> {currentCargo.provaDiscursiva.notaMinimaAprovacao}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Critérios de Desempate */}
-              <div className="space-y-2">
-                <h3 className="font-serif text-lg font-bold border-b border-gray-300 pb-1">Critérios de Desempate (Ordem de Prioridade)</h3>
-                <ol className="list-decimal list-inside text-xs space-y-1.5 p-4 rounded border bg-gray-50 dark:bg-[#111e3b] border-gray-300 dark:border-[#1e2d4d]">
-                  {currentCargo.etapasDesempate.criteriosDesempate.map((crit, i) => (
-                    <li key={i} className="font-medium text-gray-800 dark:text-gray-200">{crit}</li>
+          {/* Distribuição de Disciplinas */}
+          <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+              <Award className="w-5 h-5 text-indigo-500" />
+              Distribuição de Disciplinas e Pontuação
+            </h3>
+            <div className={`overflow-x-auto rounded-xl border ${darkMode ? "border-[#1e2d4d]" : "border-gray-200"}`}>
+              <table className="w-full text-xs text-left">
+                <thead className={`uppercase font-mono text-[10px] ${darkMode ? "bg-[#162447] text-gray-300" : "bg-gray-100 text-gray-700"}`}>
+                  <tr>
+                    <th className="py-3 px-4">Disciplina / Módulo</th>
+                    <th className="py-3 px-4 text-center">Nº Questões</th>
+                    <th className="py-3 px-4 text-center">Peso</th>
+                    <th className="py-3 px-4 text-center">Pontuação Máx</th>
+                    <th className="py-3 px-4">Corte / Mínimo</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${darkMode ? "divide-[#1e2d4d]" : "divide-gray-100"}`}>
+                  {currentCargo.provaObjetiva.distribuicaoDisciplinas.map((d, i) => (
+                    <tr key={i} className={darkMode ? "hover:bg-white/5" : "hover:bg-gray-50/50"}>
+                      <td className={`py-3 px-4 font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>{d.disciplinaOuBloco}</td>
+                      <td className="py-3 px-4 text-center font-mono font-bold text-blue-500">{d.numQuestoes}</td>
+                      <td className="py-3 px-4 text-center font-mono font-bold text-purple-500">{d.peso}</td>
+                      <td className="py-3 px-4 text-center font-mono font-bold text-emerald-500">{d.pontuacaoMaxima}</td>
+                      <td className="py-3 px-4 font-semibold text-amber-500">{d.notaMinimaOuCorte}</td>
+                    </tr>
                   ))}
-                </ol>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Prova Discursiva section */}
+          {currentCargo.provaDiscursiva.temDiscursiva && (
+            <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+              darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+            }`}>
+              <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+                <FileCheck className="w-5 h-5 text-emerald-500" />
+                Prova Discursiva / Redação
+              </h3>
+              <div className={`p-4 rounded-xl border text-xs space-y-2 ${darkMode ? "bg-[#162447] border-[#22335c] text-gray-300" : "bg-slate-50 border-gray-200 text-gray-700"}`}>
+                <p><strong>Formato:</strong> {currentCargo.provaDiscursiva.formato}</p>
+                <p><strong>Extensão:</strong> {currentCargo.provaDiscursiva.extensao}</p>
+                <p><strong>Discursivas Corrigidas:</strong> {currentCargo.provaDiscursiva.numDiscursivasCorrigidas}</p>
+                <p><strong>Critérios de Avaliação:</strong> {currentCargo.provaDiscursiva.criteriosPontuacao}</p>
+                <p><strong>Nota Mínima:</strong> {currentCargo.provaDiscursiva.notaMinimaAprovacao}</p>
               </div>
             </div>
           )}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* TAB 5: CONTEÚDO PROGRAMÁTICO VERTICALIZADO (Checkbox tachado) */}
-          {/* ----------------------------------------------------------------- */}
-          {activeTab === "conteudo" && (
-            <div className="space-y-6 animate-fade">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-300 pb-2">
-                <div>
-                  <h3 className="font-serif text-lg font-bold flex items-center gap-2">
-                    <ListChecks className="w-5 h-5 text-[#0E6E62]" /> 8. Conteúdo Programático Verticalizado
-                  </h3>
-                  <p className="text-xs text-gray-500">Marque as caixas de seleção para tachar os tópicos já estudados.</p>
-                </div>
+          {/* Critérios de Desempate */}
+          <div className={`p-6 rounded-2xl border transition-colors space-y-4 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+              <ListChecks className="w-5 h-5 text-blue-500" />
+              Critérios de Desempate (Ordem de Prioridade)
+            </h3>
+            <ol className={`list-decimal list-inside text-xs space-y-2 p-4 rounded-xl border ${darkMode ? "bg-[#162447] border-[#22335c] text-gray-300" : "bg-slate-50 border-gray-200 text-gray-700"}`}>
+              {currentCargo.etapasDesempate.criteriosDesempate.map((crit, i) => (
+                <li key={i} className="font-medium leading-relaxed">{crit}</li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      )}
 
-                {/* Topic progress counter */}
-                <div className="flex items-center gap-2 text-xs font-mono bg-[#DCEAE7] dark:bg-[#1e2d4d] text-[#0A4F47] dark:text-emerald-300 px-3 py-1.5 rounded font-bold">
-                  <span>Progresso do Cargo:</span>
-                  <span className="text-emerald-600 font-extrabold">{topicStats.done} / {topicStats.total} ({topicStats.percent}%)</span>
-                </div>
+      {/* ------------------------------------------------------------------- */}
+      {/* TAB 4: CONTEÚDO PROGRAMÁTICO VERTICALIZADO (Checkbox tachado) */}
+      {/* ------------------------------------------------------------------- */}
+      {activeTab === "conteudo" && (
+        <div className="space-y-6 animate-fade-in">
+          <div className={`p-6 rounded-2xl border transition-colors space-y-6 ${
+            darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+          }`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/10 pb-4">
+              <div>
+                <h3 className={`text-base font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-gray-900"}`}>
+                  <ListChecks className="w-5 h-5 text-blue-500" />
+                  Conteúdo Programático Verticalizado
+                </h3>
+                <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>
+                  Marque as caixas de seleção para tachar os tópicos já estudados.
+                </p>
               </div>
 
-              {/* Conhecimentos Gerais */}
-              <div className="space-y-4">
-                <h4 className="font-mono text-xs uppercase tracking-wider text-[#0E6E62] font-bold border-b border-dashed border-gray-300 pb-1">
-                  • Conhecimentos Gerais
-                </h4>
-                {currentCargo.conteudoProgramatico.conhecimentosGerais.map((mat, idx) => (
-                  <div key={idx} className={`p-4 rounded border space-y-3 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                    <h5 className="font-bold text-xs text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                      {mat.materia}
-                    </h5>
-                    <div className="space-y-2">
-                      {mat.topicos.map((topico, i) => {
-                        const key = `${currentCargo.cargoName}_CG_${mat.materia}_${topico}`;
-                        const isChecked = !!checkedTopics[key];
-                        return (
-                          <label
-                            key={i}
-                            onClick={() => toggleTopic(key)}
-                            className="flex items-start gap-3 text-xs cursor-pointer select-none group"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {}}
-                              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#0E6E62] focus:ring-[#0E6E62] cursor-pointer shrink-0"
-                            />
-                            <span className={`transition-all leading-relaxed ${isChecked ? "line-through text-gray-400 dark:text-gray-500 opacity-60 font-normal" : "text-gray-800 dark:text-gray-200 font-medium group-hover:text-[#0E6E62]"}`}>
-                              {topico}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Conhecimentos Específicos */}
-              <div className="space-y-4 pt-4">
-                <h4 className="font-mono text-xs uppercase tracking-wider text-[#B8892B] font-bold border-b border-dashed border-gray-300 pb-1">
-                  • Conhecimentos Específicos — {currentCargo.cargoName}
-                </h4>
-                {currentCargo.conteudoProgramatico.conhecimentosEspecificos.map((mat, idx) => (
-                  <div key={idx} className={`p-4 rounded border space-y-3 ${darkMode ? "bg-[#111e3b] border-[#1e2d4d]" : "bg-[#F8FAF9] border-gray-300"}`}>
-                    <h5 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                      {mat.materia}
-                    </h5>
-                    <div className="space-y-2">
-                      {mat.topicos.map((topico, i) => {
-                        const key = `${currentCargo.cargoName}_CE_${mat.materia}_${topico}`;
-                        const isChecked = !!checkedTopics[key];
-                        return (
-                          <label
-                            key={i}
-                            onClick={() => toggleTopic(key)}
-                            className="flex items-start gap-3 text-xs cursor-pointer select-none group"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {}}
-                              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#0E6E62] focus:ring-[#0E6E62] cursor-pointer shrink-0"
-                            />
-                            <span className={`transition-all leading-relaxed ${isChecked ? "line-through text-gray-400 dark:text-gray-500 opacity-60 font-normal" : "text-gray-800 dark:text-gray-200 font-medium group-hover:text-[#0E6E62]"}`}>
-                              {topico}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+              {/* Progress counter pill */}
+              <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-bold text-xs shrink-0">
+                <span>Progresso do Cargo:</span>
+                <span className="text-emerald-400 text-sm font-black">{topicStats.done} / {topicStats.total} ({topicStats.percent}%)</span>
               </div>
             </div>
-          )}
-        </main>
+
+            {/* PROGRESS BAR */}
+            <div className="space-y-1.5">
+              <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2.5 overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-emerald-500 h-full transition-all duration-300"
+                  style={{ width: `${topicStats.percent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Conhecimentos Gerais */}
+            <div className="space-y-4">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-amber-500 flex items-center gap-2 border-b border-gray-200/10 pb-2">
+                <span>• Conhecimentos Gerais</span>
+              </h4>
+              {currentCargo.conteudoProgramatico.conhecimentosGerais.map((mat, idx) => (
+                <div key={idx} className={`p-4 rounded-xl border space-y-3 ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+                  <h5 className="font-bold text-xs text-amber-500 uppercase tracking-wider">
+                    {mat.materia}
+                  </h5>
+                  <div className="space-y-2.5">
+                    {mat.topicos.map((topico, i) => {
+                      const key = `${currentCargo.cargoName}_CG_${mat.materia}_${topico}`;
+                      const isChecked = !!checkedTopics[key];
+                      return (
+                        <label
+                          key={i}
+                          onClick={() => toggleTopic(key)}
+                          className="flex items-start gap-3 text-xs cursor-pointer select-none group"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                          />
+                          <span className={`transition-all leading-relaxed ${isChecked ? "line-through text-gray-400 dark:text-gray-500 opacity-60 font-normal" : darkMode ? "text-gray-200 font-medium group-hover:text-blue-400" : "text-gray-800 font-medium group-hover:text-blue-600"}`}>
+                            {topico}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Conhecimentos Específicos */}
+            <div className="space-y-4 pt-4">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-blue-500 flex items-center gap-2 border-b border-gray-200/10 pb-2">
+                <span>• Conhecimentos Específicos — {currentCargo.cargoName}</span>
+              </h4>
+              {currentCargo.conteudoProgramatico.conhecimentosEspecificos.map((mat, idx) => (
+                <div key={idx} className={`p-4 rounded-xl border space-y-3 ${darkMode ? "bg-[#162447] border-[#22335c]" : "bg-slate-50 border-gray-200"}`}>
+                  <h5 className="font-bold text-xs text-blue-500 uppercase tracking-wider">
+                    {mat.materia}
+                  </h5>
+                  <div className="space-y-2.5">
+                    {mat.topicos.map((topico, i) => {
+                      const key = `${currentCargo.cargoName}_CE_${mat.materia}_${topico}`;
+                      const isChecked = !!checkedTopics[key];
+                      return (
+                        <label
+                          key={i}
+                          onClick={() => toggleTopic(key)}
+                          className="flex items-start gap-3 text-xs cursor-pointer select-none group"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                          />
+                          <span className={`transition-all leading-relaxed ${isChecked ? "line-through text-gray-400 dark:text-gray-500 opacity-60 font-normal" : darkMode ? "text-gray-200 font-medium group-hover:text-blue-400" : "text-gray-800 font-medium group-hover:text-blue-600"}`}>
+                            {topico}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FOOTER */}
-      <footer className="max-w-7xl mx-auto mt-8 px-8 pt-4 border-t border-gray-300 text-xs font-mono text-[#7C8B85] flex flex-col sm:flex-row justify-between gap-2">
-        <span>Fonte: Edital {edital.orgao || "001/2026"} — Concurso Público {edital.orgao || "Dataprev"}/{edital.banca || "FGV"}. Painel para consulta estratégica direta.</span>
+      <div className={`p-4 rounded-xl border text-xs font-mono flex flex-col sm:flex-row justify-between gap-2 ${
+        darkMode ? "bg-[#0f1b35] border-[#1e2d4d] text-gray-400" : "bg-white border-gray-200 text-gray-500"
+      }`}>
+        <span>Fonte: Edital {edital.orgao || "001/2026"} — Concurso Público {edital.orgao || "Dataprev"}/{edital.banca || "FGV"}.</span>
         <span>Exibindo cargo: {currentCargo.cargoName}</span>
-      </footer>
+      </div>
 
       {/* SCAN MODAL */}
       <EditalScanModal

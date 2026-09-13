@@ -1,6 +1,10 @@
 import React, { useState, useMemo } from "react";
 import { StudyState, Metas } from "../types";
-import { Plus, Trash2, Calendar, ChevronLeft, ChevronRight, Save, Clock, Smile } from "lucide-react";
+import { 
+  Plus, Trash2, Calendar, ChevronLeft, ChevronRight, Save, Clock, Smile,
+  Target, CheckCircle2, Award, Zap, Flame, TrendingUp, Sparkles, Hourglass, 
+  Activity, CheckCircle, ArrowRight
+} from "lucide-react";
 import { calcularResumoMetas } from "../utils/studyHelpers";
 
 interface MetasViewProps {
@@ -30,6 +34,113 @@ export default function MetasView({ state, updateState, darkMode }: MetasViewPro
   });
 
   const weekdayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+  // Cálculo do progresso da meta diária de HOJE baseado nas sessões registradas no state
+  const todayProgress = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    const todayISO = `${y}-${m}-${d}`;
+    const dayOfWeekIndex = now.getDay();
+    const dayName = weekdayNames[dayOfWeekIndex];
+
+    // Helper para normalizar datas de sessões
+    const normalizeDateStr = (dateStr: string) => {
+      if (!dateStr) return "";
+      if (dateStr.includes("/")) {
+        const parts = dateStr.split("/");
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        }
+      }
+      return dateStr.split("T")[0];
+    };
+
+    // Meta de hoje em horas
+    const override = metas.calendarOverrides ? metas.calendarOverrides[todayISO] : undefined;
+    const isImprodutivo = (metas.diasImprodutivos || []).includes(todayISO);
+    const horasPadrao = Number(horasDisponiveis[dayOfWeekIndex.toString()] ?? 0);
+
+    let metaHorasHoje = 0;
+    let isDiaFolga = false;
+
+    if (override !== undefined) {
+      if (!override.productive) {
+        isDiaFolga = true;
+        metaHorasHoje = 0;
+      } else {
+        metaHorasHoje = Number(override.hours || horasPadrao);
+      }
+    } else if (isImprodutivo) {
+      isDiaFolga = true;
+      metaHorasHoje = 0;
+    } else {
+      metaHorasHoje = horasPadrao;
+      isDiaFolga = horasPadrao === 0;
+    }
+
+    // Filtra todas as sessões realizadas hoje
+    const sessionsHoje = (state.sessions || []).filter((s) => {
+      return normalizeDateStr(s.data) === todayISO;
+    });
+
+    const totalMinutosHoje = sessionsHoje.reduce((acc, s) => acc + (s.duracaoMinutos || 0), 0);
+    const totalHorasHoje = totalMinutosHoje / 60;
+    const totalQuestoesAcertosHoje = sessionsHoje.reduce((acc, s) => acc + (s.questoesAcertos || 0), 0);
+    const totalQuestoesErrosHoje = sessionsHoje.reduce((acc, s) => acc + (s.questoesErros || 0), 0);
+    const totalQuestoesHoje = totalQuestoesAcertosHoje + totalQuestoesErrosHoje;
+    const taxaAcertoHoje = totalQuestoesHoje > 0 ? Math.round((totalQuestoesAcertosHoje / totalQuestoesHoje) * 100) : null;
+
+    const horasFormatadasHoje = Math.floor(totalMinutosHoje / 60);
+    const minutosRestantesHoje = totalMinutosHoje % 60;
+    const tempoEstudadoFormatado = horasFormatadasHoje > 0 
+      ? `${horasFormatadasHoje}h ${minutosRestantesHoje > 0 ? `${minutosRestantesHoje}min` : ""}`.trim()
+      : `${minutosRestantesHoje}min`;
+
+    // Cálculo percentual e minutos restantes
+    let percentage = 0;
+    let restanteMinutos = 0;
+
+    if (metaHorasHoje > 0) {
+      const metaMinutos = metaHorasHoje * 60;
+      percentage = Math.min(100, Math.round((totalMinutosHoje / metaMinutos) * 100));
+      restanteMinutos = Math.max(0, metaMinutos - totalMinutosHoje);
+    } else {
+      percentage = totalMinutosHoje > 0 ? 100 : 0;
+      restanteMinutos = 0;
+    }
+
+    const restanteHoras = Math.floor(restanteMinutos / 60);
+    const restanteMins = restanteMinutos % 60;
+    const tempoRestanteFormatado = restanteMinutos > 0
+      ? `${restanteHoras > 0 ? `${restanteHoras}h ` : ""}${restanteMins}min restantes`
+      : metaHorasHoje > 0 
+      ? "Meta diária batida! 🎉"
+      : isDiaFolga 
+      ? "Dia de Descanso" 
+      : "Sem meta definida";
+
+    return {
+      todayISO,
+      dayName,
+      formattedDate: `${d}/${m}/${y}`,
+      metaHorasHoje,
+      isDiaFolga,
+      sessionsCount: sessionsHoje.length,
+      totalMinutosHoje,
+      totalHorasHoje,
+      tempoEstudadoFormatado,
+      percentage,
+      realPercentage: metaHorasHoje > 0 ? Math.round((totalMinutosHoje / (metaHorasHoje * 60)) * 100) : 100,
+      restanteMinutos,
+      tempoRestanteFormatado,
+      totalQuestoesHoje,
+      totalQuestoesAcertosHoje,
+      totalQuestoesErrosHoje,
+      taxaAcertoHoje,
+    };
+  }, [metas, horasDisponiveis, state.sessions]);
 
   // Recalculates statistics in real-time
   const resume = useMemo(() => {
@@ -186,6 +297,278 @@ export default function MetasView({ state, updateState, darkMode }: MetasViewPro
 
   return (
     <div className="space-y-8 animate-fade-in font-sans">
+      
+      {/* COMPONENTE DE PROGRESSO CIRCULAR DA META DIÁRIA DE HOJE */}
+      <div className={`p-6 sm:p-7 rounded-2xl border transition-all shadow-lg ${
+        todayProgress.realPercentage >= 100 && todayProgress.metaHorasHoje > 0
+          ? darkMode 
+            ? "bg-gradient-to-br from-[#0c231e] via-[#0f1b35] to-[#121c2e] border-emerald-500/40 shadow-emerald-950/20" 
+            : "bg-gradient-to-br from-emerald-50/70 via-white to-blue-50/50 border-emerald-200 shadow-sm"
+          : darkMode 
+          ? "bg-[#0f1b35] border-[#1e2d4d]" 
+          : "bg-white border-gray-200 shadow-sm"
+      }`}>
+        
+        {/* Cabeçalho do Card de Progresso Diário */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-gray-100/10">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                todayProgress.realPercentage >= 100 && todayProgress.metaHorasHoje > 0
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-400/40"
+                  : todayProgress.isDiaFolga
+                  ? "bg-purple-500/20 text-purple-400 border border-purple-400/40"
+                  : todayProgress.totalMinutosHoje > 0
+                  ? "bg-blue-500/20 text-blue-400 border border-blue-400/40"
+                  : "bg-amber-500/20 text-amber-400 border border-amber-400/40"
+              }`}>
+                {todayProgress.realPercentage >= 100 && todayProgress.metaHorasHoje > 0
+                  ? `🏆 Meta Cumprida (${todayProgress.realPercentage}%)`
+                  : todayProgress.isDiaFolga && todayProgress.totalMinutosHoje === 0
+                  ? "🌴 Dia de Folga"
+                  : todayProgress.isDiaFolga && todayProgress.totalMinutosHoje > 0
+                  ? `✨ Estudo Extra (${todayProgress.tempoEstudadoFormatado})`
+                  : todayProgress.totalMinutosHoje > 0
+                  ? `⏳ Em Andamento (${todayProgress.percentage}%)`
+                  : "🚀 Não Iniciado"}
+              </span>
+              <span className="text-xs font-semibold text-gray-400">
+                {todayProgress.dayName}, {todayProgress.formattedDate}
+              </span>
+            </div>
+            <h3 className={`text-lg sm:text-xl font-black flex items-center gap-2 mt-1 ${
+              darkMode ? "text-white" : "text-gray-900"
+            }`}>
+              <Target className="w-5 h-5 text-blue-500" />
+              Progresso da Meta Diária de Hoje
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-bold px-3 py-1.5 rounded-xl border ${
+              darkMode ? "bg-white/5 border-white/10 text-gray-300" : "bg-gray-50 border-gray-200 text-gray-700"
+            }`}>
+              Meta do Dia: <strong className="text-blue-500">{todayProgress.metaHorasHoje}h</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Corpo com Gráfico Circular e Métricas */}
+        <div className="pt-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          
+          {/* Gráfico Circular SVG */}
+          <div className="md:col-span-4 flex flex-col items-center justify-center relative select-none">
+            <div className="relative w-40 h-40 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
+                <defs>
+                  <linearGradient id="circleProgressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    {todayProgress.realPercentage >= 100 ? (
+                      <>
+                        <stop offset="0%" stopColor="#10b981" />
+                        <stop offset="100%" stopColor="#059669" />
+                      </>
+                    ) : todayProgress.percentage >= 50 ? (
+                      <>
+                        <stop offset="0%" stopColor="#3b82f6" />
+                        <stop offset="100%" stopColor="#6366f1" />
+                      </>
+                    ) : (
+                      <>
+                        <stop offset="0%" stopColor="#f59e0b" />
+                        <stop offset="100%" stopColor="#ec4899" />
+                      </>
+                    )}
+                  </linearGradient>
+                </defs>
+
+                {/* Trilha de fundo */}
+                <circle
+                  cx="70"
+                  cy="70"
+                  r="54"
+                  fill="transparent"
+                  stroke={darkMode ? "#1e293b" : "#e2e8f0"}
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                />
+
+                {/* Arco de progresso */}
+                <circle
+                  cx="70"
+                  cy="70"
+                  r="54"
+                  fill="transparent"
+                  stroke="url(#circleProgressGrad)"
+                  strokeWidth="10"
+                  strokeDasharray={339.292}
+                  strokeDashoffset={339.292 - (todayProgress.percentage / 100) * 339.292}
+                  strokeLinecap="round"
+                  className="transition-all duration-1000 ease-out"
+                />
+              </svg>
+
+              {/* Informação Central no Círculo */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
+                {todayProgress.realPercentage >= 100 && todayProgress.metaHorasHoje > 0 ? (
+                  <>
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 animate-bounce mb-0.5" />
+                    <span className={`text-xl font-black leading-none ${darkMode ? "text-emerald-300" : "text-emerald-600"}`}>
+                      {todayProgress.realPercentage}%
+                    </span>
+                    <span className="text-[9px] font-bold text-emerald-400/90 uppercase tracking-wider mt-1">
+                      Concluído
+                    </span>
+                  </>
+                ) : todayProgress.isDiaFolga && todayProgress.totalMinutosHoje === 0 ? (
+                  <>
+                    <Smile className="w-8 h-8 text-purple-400 mb-0.5" />
+                    <span className={`text-base font-black leading-tight ${darkMode ? "text-purple-300" : "text-purple-600"}`}>
+                      Folga
+                    </span>
+                    <span className="text-[9px] font-semibold text-gray-400 mt-0.5">
+                      Descanso
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className={`text-2xl font-black tracking-tight leading-none ${
+                      darkMode ? "text-white" : "text-gray-900"
+                    }`}>
+                      {todayProgress.percentage}%
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-400 mt-1">
+                      {todayProgress.tempoEstudadoFormatado}
+                    </span>
+                    <span className="text-[9px] font-semibold text-blue-400">
+                      de {todayProgress.metaHorasHoje}h meta
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Mensagem motivacional curta abaixo do gráfico */}
+            <p className="text-[11px] font-medium text-gray-400 text-center mt-2.5">
+              {todayProgress.realPercentage >= 100 && todayProgress.metaHorasHoje > 0
+                ? "Parabéns! Meta de hoje atingida com êxito!"
+                : todayProgress.percentage >= 50
+                ? "Mais da metade concluída! Mantenha o foco!"
+                : todayProgress.totalMinutosHoje > 0
+                ? "Estudo em andamento. Continue firme!"
+                : todayProgress.isDiaFolga
+                ? "Dia planejado para descanso ou revisões livres."
+                : "Inicie suas sessões para preencher a meta de hoje."}
+            </p>
+          </div>
+
+          {/* Grid de 4 Métricas Detalhadas do Dia */}
+          <div className="md:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            
+            {/* Métrica 1: Tempo Estudado Hoje */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${
+              darkMode ? "bg-[#16223f]/60 border-blue-900/40" : "bg-gray-50/80 border-gray-200"
+            }`}>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">
+                  Estudado Hoje
+                </span>
+                <span className={`text-lg font-black block mt-0.5 ${
+                  todayProgress.totalMinutosHoje > 0 ? "text-blue-400" : darkMode ? "text-gray-400" : "text-gray-600"
+                }`}>
+                  {todayProgress.tempoEstudadoFormatado}
+                </span>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  {todayProgress.totalMinutosHoje} minutos contabilizados
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Métrica 2: Meta Programada */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${
+              darkMode ? "bg-[#16223f]/60 border-blue-900/40" : "bg-gray-50/80 border-gray-200"
+            }`}>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">
+                  Meta Programada
+                </span>
+                <span className="text-lg font-black block mt-0.5 text-indigo-400">
+                  {todayProgress.metaHorasHoje > 0 ? `${todayProgress.metaHorasHoje}h 00min` : "Dia Livre / Folga"}
+                </span>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  Planejamento de {todayProgress.dayName}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
+                <Target className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Métrica 3: Horas Restantes */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${
+              darkMode ? "bg-[#16223f]/60 border-blue-900/40" : "bg-gray-50/80 border-gray-200"
+            }`}>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">
+                  Restante para a Meta
+                </span>
+                <span className={`text-lg font-black block mt-0.5 ${
+                  todayProgress.restanteMinutos === 0 && todayProgress.metaHorasHoje > 0
+                    ? "text-emerald-400"
+                    : todayProgress.restanteMinutos > 0
+                    ? "text-amber-400"
+                    : "text-gray-400"
+                }`}>
+                  {todayProgress.tempoRestanteFormatado}
+                </span>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  {todayProgress.restanteMinutos > 0 
+                    ? `${todayProgress.restanteMinutos} min restantes hoje` 
+                    : "Sem pendências diárias"}
+                </span>
+              </div>
+              <div className={`p-2.5 rounded-xl ${
+                todayProgress.restanteMinutos === 0 && todayProgress.metaHorasHoje > 0
+                  ? "bg-emerald-500/10 text-emerald-400"
+                  : "bg-amber-500/10 text-amber-400"
+              }`}>
+                {todayProgress.restanteMinutos === 0 && todayProgress.metaHorasHoje > 0 ? (
+                  <CheckCircle className="w-5 h-5" />
+                ) : (
+                  <Hourglass className="w-5 h-5" />
+                )}
+              </div>
+            </div>
+
+            {/* Métrica 4: Sessões e Questões de Hoje */}
+            <div className={`p-3.5 rounded-xl border flex items-center justify-between transition-colors ${
+              darkMode ? "bg-[#16223f]/60 border-blue-900/40" : "bg-gray-50/80 border-gray-200"
+            }`}>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">
+                  Atividade de Hoje
+                </span>
+                <span className="text-lg font-black block mt-0.5 text-emerald-400">
+                  {todayProgress.sessionsCount} {todayProgress.sessionsCount === 1 ? "sessão" : "sessões"}
+                </span>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  {todayProgress.totalQuestoesHoje > 0 
+                    ? `${todayProgress.totalQuestoesHoje} questões (${todayProgress.totalQuestoesAcertosHoje} acertos • ${todayProgress.taxaAcertoHoje}%)`
+                    : "Nenhuma questão hoje"}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
+                <Flame className="w-5 h-5" />
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
       
       {/* PRIMEIRA SEÇÃO: HORAS DIÁRIAS & PERÍODO & RESUMO */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { StudyState, Disciplina, Assunto, RegistroQuestao } from "../types";
+import { formatarDataDDMMAAAA, formatarMinutosParaHHMMSS } from "../utils/studyHelpers";
 import { 
   Play, Pause, RotateCcw, Plus, Trash2, Calendar, FileText, 
   CheckCircle2, ChevronUp, ChevronDown, Upload, AlertCircle, 
   Edit, Filter, GripVertical, BookOpen, CheckCircle, RefreshCw,
-  Volume2, VolumeX, Bell, Award, Sparkles, X
+  Volume2, VolumeX, Bell, Award, Sparkles, X, Clock, Pencil
 } from "lucide-react";
 
 interface StudyViewProps {
@@ -14,7 +15,7 @@ interface StudyViewProps {
 }
 
 export default function StudyView({ state, updateState, darkMode }: StudyViewProps) {
-  const { edital, currentCycle } = state;
+  const { edital, currentCycle, sessions = [] } = state;
 
   // Flattened list of disciplines from the active study cycle
   const disciplinas = useMemo(() => {
@@ -302,54 +303,21 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
         if (currentRemaining <= 1) {
           setBlockTimers((prev) => ({ ...prev, [selectedDiscId]: 0 }));
-
-          // Automatically log study session metrics
-          handleSaveStudySessionForId(selectedDiscId, plannedSecs);
+          setIsTimerRunning(false);
+          if (intervalRef.current) clearInterval(intervalRef.current);
 
           // Play audio notification chime for block completion
           playNotificationSound('block');
 
-          // Transition to the next study block in sequence
-          const currIdx = orderedDisciplinas.findIndex(d => d.id === selectedDiscId);
-          if (currIdx !== -1 && currIdx < orderedDisciplinas.length - 1) {
-            const nextDisc = orderedDisciplinas[currIdx + 1];
-            
-            // Set visual notification modal
-            setNotificationAlert({
-              show: true,
-              title: "⏰ Tempo do Bloco Finalizado!",
-              message: `Sessão encerrada para o bloco "${disc.nome}".`,
-              submessage: `Iniciando automaticamente o próximo bloco: "${nextDisc.nome}".`,
-              type: 'block',
-              blocoNome: disc.nome,
-              proximoBlocoNome: nextDisc.nome
-            });
-            
-            setSelectedDiscId(nextDisc.id);
-          } else {
-            // End of the chain: stop the timer and verify if all blocks are finished
-            setIsTimerRunning(false);
-            if (intervalRef.current) clearInterval(intervalRef.current);
-
-            const nextTimers = { ...blockTimersRef.current, [selectedDiscId]: 0 };
-            const allFinished = orderedDisciplinas.every(d => {
-              const rem = d.id === selectedDiscId ? 0 : (nextTimers[d.id] !== undefined ? nextTimers[d.id] : (d.horasPorCiclo || 1.0) * 3600);
-              return rem <= 0;
-            });
-
-            if (allFinished) {
-              handleCycleCompleted();
-            } else {
-              setNotificationAlert({
-                show: true,
-                title: "⏰ Tempo do Bloco Finalizado!",
-                message: `Sessão encerrada para o bloco "${disc.nome}".`,
-                submessage: `Todos os blocos deste ciclo foram finalizados!`,
-                type: 'block',
-                blocoNome: disc.nome
-              });
-            }
-          }
+          // Automatically open "Registrar Tempo Estudado & Questões" modal
+          const plannedSecs = (disc.horasPorCiclo || 1.0) * 3600;
+          const mins = Math.max(1, Math.round(plannedSecs / 60));
+          setSessionInputMinutes(mins);
+          setSessionInputAcertos(0);
+          setSessionInputErros(0);
+          setSessionInputDate(new Date().toISOString().split("T")[0]);
+          setSessionInputCiclo(currentCycle);
+          setShowRegisterSessionModal(true);
         } else {
           setBlockTimers((prev) => ({ ...prev, [selectedDiscId]: currentRemaining - 1 }));
         }
@@ -605,9 +573,19 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
     if (newLogAcertos < 0 || newLogErros < 0) return;
 
     const total = newLogAcertos + newLogErros;
+
+    // Convert date string from DD/MM/YYYY to YYYY-MM-DD if needed
+    let formattedDate = newLogDate;
+    if (newLogDate.includes("/")) {
+      const pts = newLogDate.split("/");
+      if (pts.length === 3) {
+        formattedDate = `${pts[2]}-${pts[1].padStart(2, "0")}-${pts[0].padStart(2, "0")}`;
+      }
+    }
+
     const newReg: RegistroQuestao = {
       id: "reg_" + Date.now(),
-      data: newLogDate,
+      data: formattedDate,
       acertos: newLogAcertos,
       erros: newLogErros,
       total: total
@@ -685,12 +663,28 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
   const getBlockQuestionStats = (disc: Disciplina) => {
     let acertos = 0;
     let erros = 0;
-    disc.assuntos.forEach((ass) => {
-      ass.registros.forEach((reg) => {
-        acertos += reg.acertos || 0;
-        erros += reg.erros || 0;
+
+    // 1. Questions from topic daily records (Controle de Conteúdo Programático)
+    if (disc && disc.assuntos) {
+      disc.assuntos.forEach((ass) => {
+        if (ass.registros) {
+          ass.registros.forEach((reg) => {
+            acertos += reg.acertos || 0;
+            erros += reg.erros || 0;
+          });
+        }
       });
-    });
+    }
+
+    // 2. Fallback to sessions if topic registros are empty for this discipline
+    const topicTotal = acertos + erros;
+    if (topicTotal === 0) {
+      sessions.filter(s => s.disciplinaId === disc.id).forEach(s => {
+        acertos += s.questoesAcertos || 0;
+        erros += s.questoesErros || 0;
+      });
+    }
+
     return { acertos, erros, total: acertos + erros };
   };
 
@@ -707,6 +701,203 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
       erros,
       total: acertos + erros
     };
+  };
+
+  // Manual session & question log modal state
+  const [showRegisterSessionModal, setShowRegisterSessionModal] = useState(false);
+  const [sessionInputMinutes, setSessionInputMinutes] = useState(30);
+  const [sessionInputAcertos, setSessionInputAcertos] = useState(0);
+  const [sessionInputErros, setSessionInputErros] = useState(0);
+  const [sessionInputDate, setSessionInputDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [sessionInputCiclo, setSessionInputCiclo] = useState<number>(1);
+
+  // Edit existing session state
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionDate, setEditSessionDate] = useState<string>("");
+  const [editSessionMinutes, setEditSessionMinutes] = useState<number>(0);
+  const [editSessionAcertos, setEditSessionAcertos] = useState<number>(0);
+  const [editSessionErros, setEditSessionErros] = useState<number>(0);
+  const [editSessionCiclo, setEditSessionCiclo] = useState<number>(1);
+  const [editSessionDisciplinaId, setEditSessionDisciplinaId] = useState<string>("");
+
+  const handleOpenRegisterModal = () => {
+    if (!activeDisciplina) return;
+    const timerState = getBlockTimerState(activeDisciplina.id);
+    const elapsedMins = Math.max(1, Math.round(timerState.elapsed / 60));
+    setSessionInputMinutes(elapsedMins > 0 ? elapsedMins : 30);
+    setSessionInputAcertos(0);
+    setSessionInputErros(0);
+    setSessionInputDate(new Date().toISOString().split("T")[0]);
+    setSessionInputCiclo(currentCycle);
+    setShowRegisterSessionModal(true);
+  };
+
+  const handleStartEditSession = (session: any) => {
+    setEditingSessionId(session.id);
+    setEditSessionDate(session.data || new Date().toISOString().split("T")[0]);
+    setEditSessionMinutes(session.duracaoMinutos || 0);
+    setEditSessionAcertos(session.questoesAcertos || 0);
+    setEditSessionErros(session.questoesErros || 0);
+    setEditSessionCiclo(session.ciclo || currentCycle);
+    setEditSessionDisciplinaId(session.disciplinaId || "");
+  };
+
+  const handleConfirmEditSession = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSessionId) return;
+
+    const targetDisc = disciplinas.find((d) => d.id === editSessionDisciplinaId);
+
+    const updatedSessions = state.sessions.map((s) => {
+      if (s.id === editingSessionId) {
+        return {
+          ...s,
+          disciplinaId: targetDisc ? targetDisc.id : s.disciplinaId,
+          disciplinaNome: targetDisc ? targetDisc.nome : s.disciplinaNome,
+          data: editSessionDate,
+          duracaoMinutos: Math.max(0, Number(editSessionMinutes) || 0),
+          questoesAcertos: Math.max(0, Number(editSessionAcertos) || 0),
+          questoesErros: Math.max(0, Number(editSessionErros) || 0),
+          ciclo: Math.max(1, Number(editSessionCiclo) || 1)
+        };
+      }
+      return s;
+    });
+
+    updateState({
+      ...state,
+      sessions: updatedSessions
+    });
+
+    setEditingSessionId(null);
+  };
+
+  const handleConfirmRegisterSession = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeDisciplina) return;
+
+    const mins = Math.max(0, Number(sessionInputMinutes) || 0);
+    const acertos = Math.max(0, Number(sessionInputAcertos) || 0);
+    const erros = Math.max(0, Number(sessionInputErros) || 0);
+
+    const newSession = {
+      id: "session_" + Date.now(),
+      disciplinaId: activeDisciplina.id,
+      disciplinaNome: activeDisciplina.nome,
+      data: sessionInputDate || new Date().toISOString().split("T")[0],
+      duracaoMinutos: mins,
+      questoesAcertos: acertos,
+      questoesErros: erros,
+      ciclo: sessionInputCiclo || currentCycle
+    };
+
+    let updatedCategorias = edital.categorias;
+    if (acertos > 0 || erros > 0) {
+      const formattedDate = sessionInputDate || new Date().toISOString().split("T")[0];
+      const newReg: RegistroQuestao = {
+        id: "reg_session_" + Date.now(),
+        data: formattedDate,
+        acertos: acertos,
+        erros: erros,
+        total: acertos + erros
+      };
+
+      updatedCategorias = edital.categorias.map((cat) => ({
+        ...cat,
+        disciplinas: cat.disciplinas.map((disc) => {
+          if (disc.id === activeDisciplina.id) {
+            let targetAssuntos = disc.assuntos || [];
+            if (targetAssuntos.length === 0) {
+              targetAssuntos = [{
+                id: "ass_" + Date.now(),
+                nome: "01 - Conteúdo Geral da Matéria",
+                registros: []
+              }];
+            }
+            return {
+              ...disc,
+              assuntos: targetAssuntos.map((ass, idx) => {
+                if (idx === 0) {
+                  return {
+                    ...ass,
+                    registros: [...(ass.registros || []), newReg]
+                  };
+                }
+                return ass;
+              })
+            };
+          }
+          return disc;
+        })
+      }));
+    }
+
+    updateState({
+      ...state,
+      edital: {
+        ...edital,
+        categorias: updatedCategorias
+      },
+      sessions: [...state.sessions, newSession]
+    });
+
+    setShowRegisterSessionModal(false);
+    setIsTimerRunning(false);
+
+    // Reduce remaining block timer by recorded minutes
+    const currentRemaining = blockTimers[activeDisciplina.id] !== undefined 
+      ? blockTimers[activeDisciplina.id] 
+      : (activeDisciplina.horasPorCiclo || 1.0) * 3600;
+    
+    const newRemaining = Math.max(0, currentRemaining - mins * 60);
+    const updatedTimers = {
+      ...blockTimers,
+      [activeDisciplina.id]: newRemaining
+    };
+    setBlockTimers(updatedTimers);
+
+    // Auto transition to next block in sequence if present
+    const currIdx = orderedDisciplinas.findIndex(d => d.id === activeDisciplina.id);
+    if (currIdx !== -1 && currIdx < orderedDisciplinas.length - 1) {
+      const nextDisc = orderedDisciplinas[currIdx + 1];
+      setSelectedDiscId(nextDisc.id);
+
+      setNotificationAlert({
+        show: true,
+        title: "⏰ Tempo do Bloco Concluído e Registrado!",
+        message: `Sessão de ${mins} min e questões registradas com sucesso para "${activeDisciplina.nome}".`,
+        submessage: `Iniciando o próximo bloco da sequência: "${nextDisc.nome}".`,
+        type: 'block',
+        blocoNome: activeDisciplina.nome,
+        proximoBlocoNome: nextDisc.nome
+      });
+    } else if (currIdx === orderedDisciplinas.length - 1) {
+      // Last block in sequence: check if all blocks in cycle are finished
+      const allFinished = orderedDisciplinas.every(d => {
+        const rem = d.id === activeDisciplina.id ? newRemaining : (updatedTimers[d.id] !== undefined ? updatedTimers[d.id] : (d.horasPorCiclo || 1.0) * 3600);
+        return rem <= 0;
+      });
+
+      if (allFinished) {
+        handleCycleCompleted();
+      } else {
+        setNotificationAlert({
+          show: true,
+          title: "⏰ Bloco Concluído e Registrado!",
+          message: `Sessão de ${mins} min registrada para "${activeDisciplina.nome}".`,
+          submessage: `Todos os blocos deste ciclo foram finalizados!`,
+          type: 'block',
+          blocoNome: activeDisciplina.nome
+        });
+      }
+    }
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    updateState({
+      ...state,
+      sessions: state.sessions.filter(s => s.id !== sessionId)
+    });
   };
 
   // --- AI-POWERED TEST BOOKLET ANALYZER ---
@@ -779,8 +970,8 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                   assuntos: disc.assuntos.map((ass) => {
                     const match = data.classificacoes.find(
                       (item: any) => 
-                        item.assunto.toLowerCase().includes(ass.nome.toLowerCase()) || 
-                        ass.nome.toLowerCase().includes(item.assunto.toLowerCase())
+                        (item?.assunto || "").toLowerCase().includes((ass?.nome || "").toLowerCase()) || 
+                        (ass?.nome || "").toLowerCase().includes((item?.assunto || "").toLowerCase())
                     );
                     if (match) {
                       return {
@@ -825,7 +1016,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
   const filteredTopics = useMemo(() => {
     if (!activeDisciplina) return [];
     return activeDisciplina.assuntos.filter((ass) => {
-      const matchesText = ass.nome.toLowerCase().includes(filterText.toLowerCase());
+      const matchesText = (ass?.nome || "").toLowerCase().includes((filterText || "").toLowerCase());
       
       const currentInc = ass.incidencia || "MÉDIA";
       const matchesInc = filterIncidencia === "TODAS" || currentInc === filterIncidencia;
@@ -1087,6 +1278,15 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                   {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 </button>
               </div>
+
+              {/* Explicit Record Session & Questions Button */}
+              <button
+                onClick={handleOpenRegisterModal}
+                className="w-full max-w-xs mt-3 py-2.5 px-3 rounded-xl font-extrabold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-md shadow-emerald-600/20"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Registrar Tempo Estudado & Questões</span>
+              </button>
             </div>
           )}
 
@@ -1113,7 +1313,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
                 return (
                   <div
-                    key={d.id}
+                    key={d.id ? `ord-${d.id}` : `ord-idx-${index}`}
                     draggable
                     onDragStart={(e) => handleDragStart(e, index)}
                     onDragOver={handleDragOver}
@@ -1473,7 +1673,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
           {/* LISTAGEM DE TÓPICOS PROGRAMÁTICOS COM MUDANÇA DE STATUS DIRECTA */}
           <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
-            {filteredTopics.map((ass) => {
+            {filteredTopics.map((ass, topicIdx) => {
               const totals = getTopicTotals(ass);
               const isOpen = activeAssuntoId === ass.id;
               const currentInc = ass.incidencia || "MÉDIA";
@@ -1481,7 +1681,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
               return (
                 <div
-                  key={ass.id}
+                  key={ass.id ? `topic-${ass.id}` : `topic-idx-${topicIdx}`}
                   className={`border rounded-xl transition-all ${
                     darkMode
                       ? "border-[#1e2d4d] bg-[#14203e]/30 hover:bg-[#14203e]/60"
@@ -1583,18 +1783,18 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
                       {/* Log Rows list */}
                       <div className="space-y-2 mb-4 max-h-48 overflow-y-auto pr-1">
-                        {ass.registros.map((reg) => (
+                        {ass.registros.map((reg, regIdx) => (
                           <div
-                            key={reg.id}
+                            key={reg.id ? `reg-${reg.id}` : `reg-idx-${regIdx}`}
                             className={`flex justify-between items-center px-3 py-2 rounded-lg text-xs font-medium border ${
                               darkMode 
                                 ? "bg-[#14203e]/40 border-gray-800" 
                                 : "bg-gray-50 border-gray-100"
                             }`}
                           >
-                            <span className="flex items-center gap-1.5 text-gray-400">
+                            <span className="flex items-center gap-1.5 text-gray-400 font-mono">
                               <Calendar className="w-3.5 h-3.5 text-blue-500" />
-                              {reg.data}
+                              {formatarDataDDMMAAAA(reg.data)}
                             </span>
                             
                             <div className="flex items-center space-x-4">
@@ -1722,6 +1922,445 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
         </div>
 
       </div>
+
+      {/* SEÇÃO COMPLETA: SESSÕES REGISTRADAS (HISTÓRICO COMPLETO DE BLOCOS E QUESTÕES) */}
+      <div className="col-span-12 mt-4">
+        <div className={`p-6 rounded-3xl border transition-all ${
+          darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
+        }`}>
+          {/* Header Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100/10">
+            <div className="flex items-center space-x-3">
+              <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500 shrink-0">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className={`text-base font-extrabold uppercase tracking-wide ${darkMode ? "text-white" : "text-gray-900"}`}>
+                  Sessões Registradas
+                </h3>
+                <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  Histórico unificado dos tempos concluídos de todos os blocos, datas e questões resolvidas.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick summary metrics */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${
+                darkMode ? "bg-[#111e3b] border-gray-700 text-gray-200" : "bg-gray-50 border-gray-200 text-gray-700"
+              }`}>
+                Total: <strong className="text-blue-500">{state.sessions.length}</strong> {state.sessions.length === 1 ? "sessão" : "sessões"}
+              </span>
+              <span className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${
+                darkMode ? "bg-[#111e3b] border-gray-700 text-gray-200" : "bg-gray-50 border-gray-200 text-gray-700"
+              }`}>
+                Tempo Acumulado: <strong className="text-emerald-500">
+                  {(state.sessions.reduce((acc, s) => acc + (s.duracaoMinutos || 0), 0) / 60).toFixed(1)}h
+                </strong>
+              </span>
+              <span className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${
+                darkMode ? "bg-[#111e3b] border-gray-700 text-gray-200" : "bg-gray-50 border-gray-200 text-gray-700"
+              }`}>
+                Questões: <strong className="text-emerald-400">{state.sessions.reduce((acc, s) => acc + (s.questoesAcertos || 0), 0)}A</strong> / <strong className="text-rose-400">{state.sessions.reduce((acc, s) => acc + (s.questoesErros || 0), 0)}E</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Table / List of Registered Sessions */}
+          {state.sessions.length === 0 ? (
+            <div className="text-center py-10 border border-dashed rounded-2xl border-gray-200 dark:border-gray-800">
+              <Clock className="w-10 h-10 text-gray-400 mx-auto opacity-40 mb-2" />
+              <p className={`text-sm font-medium ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Nenhuma sessão de estudo registrada ainda.
+              </p>
+              <p className="text-xs text-blue-500 mt-1">
+                Conclua um bloco de estudos para que o tempo e questões sejam direcionados automaticamente para esta aba!
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className={`border-b text-[10px] font-extrabold uppercase tracking-wider ${
+                    darkMode ? "border-gray-800 text-gray-400 bg-black/20" : "border-gray-200 text-gray-600 bg-gray-50"
+                  }`}>
+                    <th className="py-3 px-3">DATA</th>
+                    <th className="py-3 px-3 text-center">N° CICLO</th>
+                    <th className="py-3 px-3">BLOCO / MATÉRIA</th>
+                    <th className="py-3 px-3 text-center">HORAS CONCLUÍDAS</th>
+                    <th className="py-3 px-3 text-center text-emerald-400">QUESTÕES CERTAS</th>
+                    <th className="py-3 px-3 text-center text-rose-400">QUESTÕES ERRADAS</th>
+                    <th className="py-3 px-3 text-center font-bold">TOTAL</th>
+                    <th className="py-3 px-3 text-right">AÇÃO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100/10">
+                  {state.sessions
+                    .slice()
+                    .reverse()
+                    .map((session, sIdx) => {
+                      const disc = disciplinas.find(d => d.id === session.disciplinaId);
+                      const catColor = disc?.cor || "#3b82f6";
+                      const acertos = session.questoesAcertos || 0;
+                      const erros = session.questoesErros || 0;
+                      const totalQ = acertos + erros;
+                      const hhmmss = formatarMinutosParaHHMMSS(session.duracaoMinutos || 0);
+                      const dataFormatada = formatarDataDDMMAAAA(session.data);
+
+                      return (
+                        <tr
+                          key={session.id ? `sess-${session.id}` : `sess-idx-${sIdx}`}
+                          className={`transition-colors hover:bg-blue-500/5 ${
+                            darkMode ? "text-gray-200" : "text-gray-800"
+                          }`}
+                        >
+                          <td className="py-3 px-3 font-mono text-xs font-semibold whitespace-nowrap">
+                            {dataFormatada}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono">
+                            <span className="px-2.5 py-1 rounded-md text-xs font-extrabold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                              {session.ciclo}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border"
+                              style={{
+                                backgroundColor: `${catColor}15`,
+                                borderColor: `${catColor}40`,
+                                color: darkMode ? "#ffffff" : "#1e293b"
+                              }}
+                            >
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
+                              {session.disciplinaNome}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-xs text-blue-400 whitespace-nowrap">
+                            {hhmmss}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-xs text-emerald-400">
+                            {acertos}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-bold text-xs text-rose-400">
+                            {erros}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono font-extrabold text-xs text-blue-300">
+                            {totalQ}
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex items-center justify-end space-x-1">
+                              <button
+                                onClick={() => handleStartEditSession(session)}
+                                className="p-1.5 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors cursor-pointer"
+                                title="Editar este registro de sessão"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSession(session.id)}
+                                className="p-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                title="Excluir este registro de sessão"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* MODAL DE REGISTRO MANUAL DE SESSÃO E QUESTÕES */}
+      {showRegisterSessionModal && activeDisciplina && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className={`relative w-full max-w-md p-6 rounded-3xl border shadow-2xl transition-all ${
+            darkMode ? "bg-[#0c1833] border-blue-500/40 text-white" : "bg-white border-blue-200 text-gray-900"
+          }`}>
+            <button
+              onClick={() => setShowRegisterSessionModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-3 rounded-2xl bg-emerald-500/10 text-emerald-500">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold tracking-tight">Registrar Sessão de Estudo</h3>
+                <p className="text-xs text-blue-400 font-bold uppercase tracking-wider">{activeDisciplina.nome}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmRegisterSession} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                    Data do Estudo
+                  </label>
+                  <input
+                    type="date"
+                    value={sessionInputDate}
+                    onChange={(e) => setSessionInputDate(e.target.value)}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                    }`}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                    Ciclo de Estudo (Nº)
+                  </label>
+                  <select
+                    value={sessionInputCiclo}
+                    onChange={(e) => setSessionInputCiclo(parseInt(e.target.value) || currentCycle)}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                    }`}
+                  >
+                    {Array.from({ length: Math.max(currentCycle + 5, 10) }, (_, i) => i + 1).map((c) => (
+                      <option key={c} value={c}>
+                        Ciclo {c} {c === currentCycle ? "(Atual)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                  Tempo Estudado (em Minutos)
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value={sessionInputMinutes}
+                    onChange={(e) => setSessionInputMinutes(Math.max(1, parseInt(e.target.value) || 0))}
+                    className={`flex-1 py-2 px-3 rounded-xl border font-mono font-bold text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                    }`}
+                    required
+                  />
+                  <span className="text-xs font-bold text-gray-400">min ({(sessionInputMinutes / 60).toFixed(1)}h)</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-emerald-400">
+                    Acertos (Questões)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={sessionInputAcertos}
+                    onChange={(e) => setSessionInputAcertos(Math.max(0, parseInt(e.target.value) || 0))}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-emerald-500/30 text-white" : "bg-emerald-50 border-emerald-300 text-emerald-900"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-rose-400">
+                    Erros (Questões)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={sessionInputErros}
+                    onChange={(e) => setSessionInputErros(Math.max(0, parseInt(e.target.value) || 0))}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-rose-500/30 text-white" : "bg-rose-50 border-rose-300 text-rose-900"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-300 leading-relaxed">
+                💡 Ao salvar, este registro atualizará instantaneamente seus gráficos de Produtividade por Dia, Disciplinas Estudadas, Desempenho e Horas Acumuladas no Ciclo {currentCycle}!
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterSessionModal(false)}
+                  className="py-2 px-4 rounded-xl text-xs font-bold bg-gray-700 hover:bg-gray-600 text-white transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="py-2 px-5 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer shadow-lg shadow-emerald-600/20 flex items-center space-x-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Salvar Registro</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE EDIÇÃO DE SESSÃO REGISTRADA */}
+      {editingSessionId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className={`relative w-full max-w-md p-6 rounded-3xl border shadow-2xl transition-all ${
+            darkMode ? "bg-[#0c1833] border-blue-500/40 text-white" : "bg-white border-blue-200 text-gray-900"
+          }`}>
+            <button
+              onClick={() => setEditingSessionId(null)}
+              className="absolute top-4 right-4 p-2 rounded-full text-gray-400 hover:text-gray-200 hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-3 rounded-2xl bg-blue-500/10 text-blue-500">
+                <Pencil className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold tracking-tight">Editar Sessão Registrada</h3>
+                <p className="text-xs text-blue-400 font-bold uppercase tracking-wider">Ajustar Informações da Sessão</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmEditSession} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                  Bloco / Matéria
+                </label>
+                <select
+                  value={editSessionDisciplinaId}
+                  onChange={(e) => setEditSessionDisciplinaId(e.target.value)}
+                  className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                    darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                  }`}
+                >
+                  {disciplinas.map((d, idx) => (
+                    <option key={d.id || `disc-opt-${idx}`} value={d.id}>
+                      {(d.nome || "").toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                    Data do Estudo
+                  </label>
+                  <input
+                    type="date"
+                    value={editSessionDate}
+                    onChange={(e) => setEditSessionDate(e.target.value)}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                    }`}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                    Ciclo de Estudo (Nº)
+                  </label>
+                  <select
+                    value={editSessionCiclo}
+                    onChange={(e) => setEditSessionCiclo(parseInt(e.target.value) || 1)}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                    }`}
+                  >
+                    {Array.from({ length: Math.max(currentCycle + 5, 10) }, (_, i) => i + 1).map((c) => (
+                      <option key={c} value={c}>
+                        Ciclo {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-gray-400">
+                  Tempo Estudado (em Minutos)
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="1440"
+                    value={editSessionMinutes}
+                    onChange={(e) => setEditSessionMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                    className={`flex-1 py-2 px-3 rounded-xl border font-mono font-bold text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-gray-700 text-white" : "bg-gray-50 border-gray-300 text-gray-900"
+                    }`}
+                    required
+                  />
+                  <span className="text-xs font-bold text-gray-400">min ({(editSessionMinutes / 60).toFixed(1)}h)</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-emerald-400">
+                    Acertos (Questões)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editSessionAcertos}
+                    onChange={(e) => setEditSessionAcertos(Math.max(0, parseInt(e.target.value) || 0))}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-emerald-500/30 text-white" : "bg-emerald-50 border-emerald-300 text-emerald-900"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-rose-400">
+                    Erros (Questões)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editSessionErros}
+                    onChange={(e) => setEditSessionErros(Math.max(0, parseInt(e.target.value) || 0))}
+                    className={`w-full py-2 px-3 rounded-xl border font-mono text-sm outline-none ${
+                      darkMode ? "bg-[#111e3b] border-rose-500/30 text-white" : "bg-rose-50 border-rose-300 text-rose-900"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingSessionId(null)}
+                  className="py-2 px-4 rounded-xl text-xs font-bold bg-gray-700 hover:bg-gray-600 text-white transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="py-2 px-5 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer shadow-lg shadow-blue-600/20 flex items-center space-x-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Salvar Alterações</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE SINALIZAÇÃO SONORA E VISUAL (FINAL DE BLOCO E FINAL DE CICLO) */}
       {notificationAlert && notificationAlert.show && (

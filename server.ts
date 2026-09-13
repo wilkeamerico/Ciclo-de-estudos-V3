@@ -353,10 +353,194 @@ Analise as partes do edital correspondentes a este cargo e extraia as disciplina
   }
 });
 
-// API endpoint for analyzing exam papers to find topic incidences
+// API endpoint for Official Answer Key (Gabarito) Scanning by Emphasis/Cargo using Gemini API
+app.post("/api/scan-gabarito", async (req, res) => {
+  try {
+    const { text, pdfBase64, pdfMimeType, enfaseDesejada } = req.body;
+
+    if (!text && !pdfBase64) {
+      return res.status(400).json({ error: "É necessário fornecer um arquivo PDF/Imagem ou texto com o gabarito oficial." });
+    }
+
+    const client = getGeminiClient();
+    const parts: any[] = [];
+
+    if (pdfBase64) {
+      parts.push({
+        inlineData: {
+          mimeType: pdfMimeType || "application/pdf",
+          data: pdfBase64,
+        },
+      });
+    }
+
+    if (text) {
+      parts.push({
+        text: `Texto complementar / Gabarito oficial informado:\n${text}`,
+      });
+    }
+
+    const promptText = `Você é um especialista em processamento de gabaritos oficiais de concursos públicos (Cebraspe, FGV, FCC, Cesgranrio, Vunesp, etc.).
+Sua tarefa é analisar o gabarito oficial fornecido e extrair as respostas corretas de cada questão para a ênfase, perfil ou cargo especificado.
+
+Ênfase / Cargo / Perfil Solicitado: "${enfaseDesejada || "Geral / Padrão"}".
+
+Instruções críticas de extração:
+1. Procure especificamente pelo gabarito correspondente à ênfase ou cargo "${enfaseDesejada || "Geral"}". Se o documento contiver gabaritos de várias ênfases (ex: Ênfase 1, Ênfase 2, Ênfase 14 - Engenharia de Petróleo, etc.), localize e extraia rigorosamente as respostas da ênfase solicitada.
+2. Para cada questão (1, 2, 3, ...), identifique a alternativa correta (A, B, C, D, E) ou o julgamento (C para Certo, E para Errado).
+3. Se uma questão foi anulada pela banca, marque a resposta como "X" ou "ANULADA".
+4. Retorne a lista completa e sequencial de respostas com o número da questão e a letra correspondente, além da sequência contínua (ex: "ABCDECE...").`;
+
+    parts.push({ text: promptText });
+
+    const promptSchema = {
+      type: Type.OBJECT,
+      properties: {
+        cargoOuEnfaseIdentificado: { type: Type.STRING, description: "Nome do cargo ou ênfase identificado no gabarito oficial" },
+        tipoGabarito: { type: Type.STRING, description: "Tipo do gabarito (ex: Preliminar, Definitivo, Certo/Errado, Múltipla Escolha)" },
+        totalQuestoes: { type: Type.INTEGER, description: "Quantidade total de questões identificadas no gabarito da ênfase" },
+        sequenciaGabarito: { type: Type.STRING, description: "Sequência contínua de letras maiúsculas (ex: ABCDECCEE...)" },
+        respostas: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              numero: { type: Type.INTEGER, description: "Número da questão (1, 2, 3...)" },
+              resposta: { type: Type.STRING, description: "Letra da alternativa correta (A, B, C, D, E, C, E ou X)" }
+            },
+            required: ["numero", "resposta"]
+          }
+        }
+      },
+      required: ["cargoOuEnfaseIdentificado", "totalQuestoes", "sequenciaGabarito", "respostas"]
+    };
+
+    const response = await callGeminiWithRetry(client, {
+      contents: { parts },
+      config: {
+        systemInstruction: "Você é um assistente especialista na leitura e extração estruturada de gabaritos oficiais de concursos públicos.",
+        responseMimeType: "application/json",
+        responseSchema: promptSchema,
+        temperature: 0.1,
+      },
+    });
+
+    const resultText = response.text;
+    if (!resultText) {
+      throw new Error("Nenhum dado retornado do modelo Gemini.");
+    }
+
+    const data = JSON.parse(resultText);
+    return res.json(data);
+  } catch (error: any) {
+    console.error("Erro no escaneamento do gabarito por IA:", error);
+    const errStr = (error?.message || "") + " " + JSON.stringify(error || "");
+    let userMsg = error?.message || "Erro ao escanear o gabarito oficial com a IA.";
+    if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED")) {
+      userMsg = "A cota de IA foi temporariamente atingida. Por favor, aguarde alguns instantes e tente novamente.";
+    }
+    return res.status(500).json({ error: userMsg });
+  }
+});
+
+// API endpoint for Candidate Answer Key / Answer Sheet (Gabarito Preenchido pelo Candidato) Scanning using Gemini API
+app.post("/api/scan-respostas-candidato", async (req, res) => {
+  try {
+    const { text, pdfBase64, pdfMimeType, tipoQuestoes, totalQuestoes } = req.body;
+
+    if (!text && !pdfBase64) {
+      return res.status(400).json({ error: "É necessário fornecer uma imagem/PDF do cartão resposta ou texto com as respostas preenchidas pelo candidato." });
+    }
+
+    const client = getGeminiClient();
+    const parts: any[] = [];
+
+    if (pdfBase64) {
+      parts.push({
+        inlineData: {
+          mimeType: pdfMimeType || "image/jpeg",
+          data: pdfBase64,
+        },
+      });
+    }
+
+    if (text) {
+      parts.push({
+        text: `Texto complementar com respostas ou anotações do candidato:\n${text}`,
+      });
+    }
+
+    const promptText = `Você é um especialista em leitura óptica e visão computacional para decodificação de cartões-resposta (folha de respostas / gabarito do candidato) de concursos públicos (Cebraspe, FGV, FCC, Cesgranrio, Vunesp, etc.).
+Sua tarefa é analisar o cartão de resposta, anotações de prova, rascunho de gabarito ou foto da folha preenchida pelo candidato e extrair com precisão a alternativa ou julgamento marcado pelo candidato em cada questão.
+
+${tipoQuestoes ? `Tipo esperado de questão: ${tipoQuestoes === "certo_errado" ? "Certo ou Errado (C ou E)" : "Múltipla Escolha (A, B, C, D ou E)"}.` : ""}
+${totalQuestoes ? `Total aproximado de questões esperado: ${totalQuestoes}.` : ""}
+
+Instruções críticas:
+1. Para cada questão identificada (1, 2, 3...):
+   - Se a prova for Múltipla Escolha: Identifique a letra da alternativa assinalada/preenchida pelo candidato (A, B, C, D ou E).
+   - Se a prova for Certo ou Errado: Identifique C (Certo) ou E (Errado).
+   - Se a questão estiver em branco ou com rasura/dupla marcação, marque como em branco ("") ou "BRANCO".
+2. Ordene as questões sequencialmente a partir do número 1.
+3. Gere uma sequência contínua com as letras identificadas (ex: "ABCDECE...").
+4. Informe o total de questões identificadas e o tipo detectado.`;
+
+    parts.push({ text: promptText });
+
+    const promptSchema = {
+      type: Type.OBJECT,
+      properties: {
+        totalQuestoes: { type: Type.INTEGER, description: "Quantidade total de questões preenchidas identificadas" },
+        tipoQuestoes: { type: Type.STRING, description: "Tipo identificado: multipla ou certo_errado" },
+        sequenciaRespostas: { type: Type.STRING, description: "Sequência contínua de letras maiúsculas marcadas pelo candidato (ex: ABCDECE...)" },
+        respostas: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              numero: { type: Type.INTEGER, description: "Número da questão (1, 2, 3...)" },
+              resposta: { type: Type.STRING, description: "Letra marcada pelo candidato (A, B, C, D, E, C, E ou vazio se em branco)" }
+            },
+            required: ["numero", "resposta"]
+          }
+        },
+        observacoes: { type: Type.STRING, description: "Observações da leitura (ex: questões em branco ou rasuras)" }
+      },
+      required: ["totalQuestoes", "sequenciaRespostas", "respostas"]
+    };
+
+    const response = await callGeminiWithRetry(client, {
+      contents: { parts },
+      config: {
+        systemInstruction: "Você é um assistente especialista na leitura óptica e transcrição de cartões de respostas de candidatos em provas de concursos públicos.",
+        responseMimeType: "application/json",
+        responseSchema: promptSchema,
+        temperature: 0.1,
+      },
+    });
+
+    const resultText = response.text;
+    if (!resultText) {
+      throw new Error("Nenhum dado retornado do modelo Gemini.");
+    }
+
+    const data = JSON.parse(resultText);
+    return res.json(data);
+  } catch (error: any) {
+    console.error("Erro no escaneamento das respostas do candidato por IA:", error);
+    const errStr = (error?.message || "") + " " + JSON.stringify(error || "");
+    let userMsg = error?.message || "Erro ao escanear as respostas do candidato com a IA.";
+    if (errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED")) {
+      userMsg = "A cota de IA foi temporariamente atingida. Por favor, aguarde alguns instantes e tente novamente.";
+    }
+    return res.status(500).json({ error: userMsg });
+  }
+});
+
+// API endpoint for analyzing exam papers (caderno de provas) to extract exact question count, map edital contents, and provide cycle improvement diagnostics
 app.post("/api/scan-caderno", async (req, res) => {
   try {
-    const { pdfBase64, pdfMimeType, text, assuntos } = req.body;
+    const { pdfBase64, pdfMimeType, text, assuntos, disciplinasEdital, cargoDesejado } = req.body;
 
     if (!pdfBase64 && !text) {
       return res.status(400).json({ error: "É necessário fornecer um caderno de provas em arquivo PDF ou texto." });
@@ -380,40 +564,131 @@ app.post("/api/scan-caderno", async (req, res) => {
       });
     }
 
-    const assuntosList = Array.isArray(assuntos) ? assuntos : [];
-    parts.push({
-      text: `Analise as questões presentes neste caderno de prova e determine a frequência de cobrança (incidência) para cada um dos seguintes assuntos/tópicos listados abaixo.
-Classifique cada assunto estritamente como "ALTA", "MÉDIA" ou "BAIXA".
+    let promptText = `Você é um renomado auditor e especialista em concursos públicos e análise pedagógica de provas (Cebraspe, FGV, FCC, Cesgranrio, Vunesp, etc.).
+Sua missão é realizar uma análise aprofundada e minuciosa deste CADERNO DE PROVAS com 3 objetivos principais:
 
-Lista de assuntos para classificar:
-${JSON.stringify(assuntosList)}
+1. EXTRAÇÃO EXATA DA QUANTIDADE DE QUESTÕES:
+   - Identifique rigorosamente o número total exato de questões existentes no caderno de prova (ex: 50, 60, 70, 100, 120 questões).
+   - Identifique o formato das questões (Múltipla Escolha com alternativas A-E ou Certo/Errado no estilo Cebraspe).
+   - Agrupe e mapeie cada bloco ou disciplina com sua respectiva faixa de questões (ex: Português: questões 1 a 15, Raciocínio Lógico: questões 16 a 25, Conhecimentos Específicos: questões 26 a 70, etc.).
 
-Retorne um objeto JSON contendo um array 'classificacoes', onde cada item possui o nome do 'assunto' e a 'incidencia' ("ALTA", "MÉDIA" ou "BAIXA") correspondente, explicando brevemente o motivo.`,
-    });
+2. MAPEAMENTO DOS CONTEÚDOS DO EDITAL COBRADOS NA PROVA:
+   - Relacione os tópicos cobrados no caderno de prova com as disciplinas e assuntos do edital do concurso (Cargo: "${cargoDesejado || "Geral"}").
+   - Identifique quais assuntos do edital tiveram incidência "ALTA", "MÉDIA" ou "BAIXA" nas questões da prova.
+   - Aponte os números das questões associados a cada assunto.
+
+3. ANÁLISE INTELIGENTE & DIAGNÓSTICO PARA OS PRÓXIMOS CICLOS E SESSÕES DE ESTUDOS:
+   - Com base nos conteúdos e no grau de complexidade das questões cobradas neste caderno de provas, elabore um diagnóstico tático e pedagógico indicando com precisão QUAIS CONTEÚDOS o estudante precisa melhorar/reforçar nos próximos ciclos de estudos e sessões de estudo.
+   - Forneça recomendações acionáveis por disciplina, sugestões de ajuste de carga horária/foco e orientações práticas para as sessões de estudo (revisão de teoria, foco em jurisprudência/lei seca, baterias de questões específicas, etc.).`;
+
+    if (disciplinasEdital && Array.isArray(disciplinasEdital) && disciplinasEdital.length > 0) {
+      promptText += `\n\nDisciplinas e Assuntos Cadastrados no Edital do Candidato para Cruzamento de Dados:\n${JSON.stringify(disciplinasEdital, null, 2)}`;
+    } else if (assuntos && Array.isArray(assuntos) && assuntos.length > 0) {
+      promptText += `\n\nLista de Assuntos do Edital para Cruzamento:\n${JSON.stringify(assuntos, null, 2)}`;
+    }
+
+    parts.push({ text: promptText });
 
     const promptSchema = {
       type: Type.OBJECT,
       properties: {
+        totalQuestoes: { type: Type.INTEGER, description: "Quantidade total exata de questões identificadas no caderno de provas" },
+        tipoProva: { type: Type.STRING, description: "Tipo da prova: 'Múltipla Escolha (A-E)' ou 'Certo / Errado (C/E)'" },
+        disciplinasMapeadas: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              nome: { type: Type.STRING, description: "Nome da disciplina identificada" },
+              questoesCount: { type: Type.INTEGER, description: "Quantidade de questões identificadas desta disciplina" },
+              faixaQuestoes: { type: Type.STRING, description: "Ex: 'Questões 01 a 15'" },
+              pesoSugerido: { type: Type.NUMBER, description: "Peso sugerido ou identificado (padrão 1)" },
+              principaisTemas: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "Principais temas identificados nesta matéria"
+              }
+            },
+            required: ["nome", "questoesCount", "faixaQuestoes"]
+          }
+        },
+        conteudosCobradosNoEdital: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              disciplina: { type: Type.STRING, description: "Nome da disciplina correspondente" },
+              assunto: { type: Type.STRING, description: "Nome do assunto/tópico programático" },
+              incidencia: { type: Type.STRING, description: "Incidência identificada: 'ALTA', 'MÉDIA' ou 'BAIXA'" },
+              frequenciaQuestoes: { type: Type.INTEGER, description: "Número de questões que abordaram este assunto" },
+              questoesNumeros: {
+                type: Type.ARRAY,
+                items: { type: Type.INTEGER },
+                description: "Números das questões que cobraram este assunto"
+              },
+              resumoCobranca: { type: Type.STRING, description: "Breve explicação de como o assunto foi cobrado pela banca" }
+            },
+            required: ["disciplina", "assunto", "incidencia", "frequenciaQuestoes"]
+          }
+        },
+        diagnosticoProximosCiclos: {
+          type: Type.OBJECT,
+          properties: {
+            resumoGeral: { type: Type.STRING, description: "Diagnóstico geral sobre o nível de exigência e padrão de cobrança da prova" },
+            topicosCriticosMelhorar: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  disciplina: { type: Type.STRING },
+                  assunto: { type: Type.STRING },
+                  motivo: { type: Type.STRING, description: "Por que este tema é crítico ou de alta relevância para a banca" },
+                  recomendacaoEstudo: { type: Type.STRING, description: "Ação prática de estudo recomendada para as próximas sessões" },
+                  prioridade: { type: Type.STRING, description: "'URGENTE', 'ALTA' ou 'MÉDIA'" }
+                },
+                required: ["disciplina", "assunto", "motivo", "recomendacaoEstudo", "prioridade"]
+              }
+            },
+            sugestaoAjusteCargaHoraria: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  disciplina: { type: Type.STRING },
+                  acaoRecomendada: { type: Type.STRING, description: "Ex: 'Aumentar carga em 20%', 'Manter foco em resolução de questões'" },
+                  justificativa: { type: Type.STRING }
+                },
+                required: ["disciplina", "acaoRecomendada", "justificativa"]
+              }
+            },
+            orientacoesSessoesEstudo: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Lista de 4 a 6 orientações táticas e práticas para os próximos ciclos de estudo"
+            }
+          },
+          required: ["resumoGeral", "topicosCriticosMelhorar", "sugestaoAjusteCargaHoraria", "orientacoesSessoesEstudo"]
+        },
         classificacoes: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
               assunto: { type: Type.STRING },
-              incidencia: { type: Type.STRING, description: "ALTA, MÉDIA ou BAIXA" },
+              incidencia: { type: Type.STRING },
               motivo: { type: Type.STRING }
             },
             required: ["assunto", "incidencia"]
           }
         }
       },
-      required: ["classificacoes"]
+      required: ["totalQuestoes", "tipoProva", "disciplinasMapeadas", "conteudosCobradosNoEdital", "diagnosticoProximosCiclos"]
     };
 
     const response = await callGeminiWithRetry(client, {
       contents: { parts },
       config: {
-        systemInstruction: "Você é uma inteligência artificial especialista em análise de provas de concursos. Sua tarefa é analisar o caderno de prova fornecido, identificar quais assuntos da lista são cobrados nas questões, e quantificar/classificar o nível de incidência de cada assunto.",
+        systemInstruction: "Você é uma inteligência artificial especialista em análise de cadernos de prova e elaboração de planos de estudos estratégicos para concursos públicos. Extraia o quantitativo exato de questões, mapeie os conteúdos e forneça um diagnóstico inteligente de altíssimo valor pedagógico.",
         responseMimeType: "application/json",
         responseSchema: promptSchema,
         temperature: 0.1,
@@ -425,7 +700,8 @@ Retorne um objeto JSON contendo um array 'classificacoes', onde cada item possui
       throw new Error("Nenhum dado retornado do Gemini.");
     }
 
-    return res.json(JSON.parse(resultText));
+    const data = JSON.parse(resultText);
+    return res.json(data);
   } catch (error: any) {
     console.error("Erro ao analisar caderno de provas:", error);
     const errStr = (error?.message || "") + " " + JSON.stringify(error || "");

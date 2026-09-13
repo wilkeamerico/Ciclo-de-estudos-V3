@@ -93,3 +93,40 @@ export async function saveAllCiclosToFirestore(userId: string, ciclos: CicloEstu
     throw error;
   }
 }
+
+/**
+ * Saves standalone mock exams state (Simulados Avulsos) to Firestore for a user.
+ */
+export async function saveSimuladosAvulsosToFirestore(userId: string, state: any): Promise<void> {
+  if (!userId || !state) return;
+  try {
+    const docRef = doc(db, "users", userId, "simulados_avulsos", "default");
+    const sanitizedData = sanitizeForFirestore({
+      userId,
+      state,
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(docRef, sanitizedData);
+  } catch (error) {
+    console.error("Erro ao salvar simulados avulsos no Firestore:", error);
+  }
+}
+
+/**
+ * Retrieves standalone mock exams state (Simulados Avulsos) from Firestore for a user.
+ */
+export async function getSimuladosAvulsosFromFirestore(userId: string): Promise<any | null> {
+  if (!userId) return null;
+  try {
+    const colRef = collection(db, "users", userId, "simulados_avulsos");
+    const querySnapshot = await getDocs(colRef);
+    if (!querySnapshot.empty) {
+      const firstDoc = querySnapshot.docs[0].data();
+      return firstDoc.state || null;
+    }
+    return null;
+  } catch (error) {
+    console.error("Erro ao carregar simulados avulsos do Firestore:", error);
+    return null;
+  }
+}

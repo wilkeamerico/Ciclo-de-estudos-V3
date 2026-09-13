@@ -13,12 +13,26 @@
         "userId": { "type": "string" }
       },
       "required": ["id", "orgao", "cargoDesejado", "nivel", "state", "userId"]
+    },
+    "SimuladosAvulsos": {
+      "title": "Simulados Avulsos",
+      "description": "Registro de simulados e provas feitos de forma avulsa pelo estudante, independentes de ciclos de estudo.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "state": { "type": "object" }
+      },
+      "required": ["userId", "state"]
     }
   },
   "firestore": {
     "users/{userId}/ciclos/{cicloId}": {
       "schema": "CicloEstudo",
       "description": "Coleção de ciclos de estudo por usuário"
+    },
+    "users/{userId}/simulados_avulsos/{docId}": {
+      "schema": "SimuladosAvulsos",
+      "description": "Coleção de simulados e provas avulsas por usuário"
     }
   }
 }

@@ -20,31 +20,22 @@ export const DEFAULT_STUDY_STATE: StudyState = {
               {
                 id: "ass_port_1",
                 nome: "01 - Ortografia Oficial e Acentuação Gráfica",
-                registros: [
-                  { id: "reg_p1_1", data: "05/07/2026", acertos: 15, erros: 5, total: 20 },
-                  { id: "reg_p1_2", data: "08/07/2026", acertos: 18, erros: 2, total: 20 }
-                ]
+                registros: []
               },
               {
                 id: "ass_port_2",
                 nome: "02 - Sintaxe do Período Simples e Composto",
-                registros: [
-                  { id: "reg_p2_1", data: "06/07/2026", acertos: 12, erros: 5, total: 17 }
-                ]
+                registros: []
               },
               {
                 id: "ass_port_3",
                 nome: "03 - Regência Nominal e Verbal",
-                registros: [
-                  { id: "reg_p3_1", data: "07/07/2026", acertos: 8, erros: 4, total: 12 }
-                ]
+                registros: []
               },
               {
                 id: "ass_port_4",
                 nome: "04 - Concordância Nominal e Verbal",
-                registros: [
-                  { id: "reg_p4_1", data: "09/07/2026", acertos: 15, erros: 1, total: 16 }
-                ]
+                registros: []
               },
               {
                 id: "ass_port_5",
@@ -64,9 +55,7 @@ export const DEFAULT_STUDY_STATE: StudyState = {
               {
                 id: "ass_ing_1",
                 nome: "01 - Compreensão de Textos Escritos em Língua Inglesa",
-                registros: [
-                  { id: "reg_i1_1", data: "04/07/2026", acertos: 9, erros: 1, total: 10 }
-                ]
+                registros: []
               },
               {
                 id: "ass_ing_2",
@@ -92,9 +81,7 @@ export const DEFAULT_STUDY_STATE: StudyState = {
               {
                 id: "ass_b1_1",
                 nome: "01 - Operação de Processos Químicos e Petroquímicos",
-                registros: [
-                  { id: "reg_b1_1", data: "02/07/2026", acertos: 25, erros: 5, total: 30 }
-                ]
+                registros: []
               },
               {
                 id: "ass_b1_2",
@@ -114,9 +101,7 @@ export const DEFAULT_STUDY_STATE: StudyState = {
               {
                 id: "ass_b2_1",
                 nome: "01 - Instrumentação e Controle de Processos",
-                registros: [
-                  { id: "reg_b2_1", data: "03/07/2026", acertos: 14, erros: 6, total: 20 }
-                ]
+                registros: []
               },
               {
                 id: "ass_b2_2",
@@ -136,9 +121,7 @@ export const DEFAULT_STUDY_STATE: StudyState = {
               {
                 id: "ass_b3_1",
                 nome: "01 - Equipamentos Dinâmicos e Estáticos",
-                registros: [
-                  { id: "reg_b3_1", data: "01/07/2026", acertos: 12, erros: 3, total: 15 }
-                ]
+                registros: []
               },
               {
                 id: "ass_b3_2",
@@ -162,24 +145,43 @@ export const DEFAULT_STUDY_STATE: StudyState = {
       "5": 3, // Sexta
       "6": 5  // Sábado
     },
-    dataInicial: "2026-07-10",
-    dataFinal: "2026-10-14",
-    diasImprodutivos: ["2026-09-07", "2026-10-12"],
+    dataInicial: new Date().toISOString().split("T")[0],
+    dataFinal: "",
+    diasImprodutivos: [],
     calendarOverrides: {}
   },
-  currentCycle: 2,
-  sessions: [
-    { id: "s1", disciplinaId: "disc_portugues", disciplinaNome: "Língua Portuguesa", data: "2026-07-05", duracaoMinutos: 60, questoesAcertos: 15, questoesErros: 5, ciclo: 1 },
-    { id: "s2", disciplinaId: "disc_portugues", disciplinaNome: "Língua Portuguesa", data: "2026-07-08", duracaoMinutos: 45, questoesAcertos: 18, questoesErros: 2, ciclo: 1 },
-    { id: "s3", disciplinaId: "disc_portugues", disciplinaNome: "Língua Portuguesa", data: "2026-07-06", duracaoMinutos: 90, questoesAcertos: 12, questoesErros: 5, ciclo: 1 },
-    { id: "s4", disciplinaId: "disc_portugues", disciplinaNome: "Língua Portuguesa", data: "2026-07-07", duracaoMinutos: 60, questoesAcertos: 8, questoesErros: 4, ciclo: 2 },
-    { id: "s5", disciplinaId: "disc_portugues", disciplinaNome: "Língua Portuguesa", data: "2026-07-09", duracaoMinutos: 120, questoesAcertos: 15, questoesErros: 1, ciclo: 2 },
-    { id: "s6", disciplinaId: "disc_ingles", disciplinaNome: "Língua Inglesa", data: "2026-07-04", duracaoMinutos: 60, questoesAcertos: 9, questoesErros: 1, ciclo: 1 },
-    { id: "s7", disciplinaId: "disc_bloco1", disciplinaNome: "Bloco 1", data: "2026-07-02", duracaoMinutos: 120, questoesAcertos: 25, questoesErros: 5, ciclo: 1 },
-    { id: "s8", disciplinaId: "disc_bloco2", disciplinaNome: "Bloco 2", data: "2026-07-03", duracaoMinutos: 90, questoesAcertos: 14, questoesErros: 6, ciclo: 1 },
-    { id: "s9", disciplinaId: "disc_bloco3", disciplinaNome: "Bloco 3", data: "2026-07-01", duracaoMinutos: 90, questoesAcertos: 12, questoesErros: 3, ciclo: 1 }
-  ]
+  currentCycle: 1,
+  sessions: []
 };
+
+export function sanitizeCycleState(state: StudyState): StudyState {
+  if (!state) return state;
+
+  const MOCK_SESSION_IDS = new Set(["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"]);
+  const cleanSessions = (state.sessions || []).filter(s => !MOCK_SESSION_IDS.has(s.id));
+
+  const MOCK_REG_IDS = new Set(["reg_p1_1", "reg_p1_2", "reg_p2_1", "reg_p3_1", "reg_p4_1", "reg_i1_1", "reg_b1_1", "reg_b2_1", "reg_b3_1"]);
+
+  const cleanEdital = { ...state.edital };
+  if (cleanEdital.categorias) {
+    cleanEdital.categorias = cleanEdital.categorias.map(cat => ({
+      ...cat,
+      disciplinas: (cat.disciplinas || []).map(disc => ({
+        ...disc,
+        assuntos: (disc.assuntos || []).map(ass => ({
+          ...ass,
+          registros: (ass.registros || []).filter(r => !MOCK_REG_IDS.has(r.id))
+        }))
+      }))
+    }));
+  }
+
+  return {
+    ...state,
+    edital: cleanEdital,
+    sessions: cleanSessions
+  };
+}
 
 export const EMPTY_STUDY_STATE: StudyState = {
   edital: {
