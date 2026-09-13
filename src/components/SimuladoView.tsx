@@ -99,11 +99,148 @@ export default function SimuladoView({
 
   // Disciplines list based on edital registered subjects
   const disciplinasCadastradas = useMemo(() => {
-    return edital.categorias.flatMap(c => c.disciplinas.map(d => ({
+    return (edital.categorias || []).flatMap(c => (c.disciplinas || []).map(d => ({
       ...d,
       categoriaNome: c.nome
     })));
   }, [edital]);
+
+  // Auto-initialize standard disciplines for Avulso mode if empty
+  React.useEffect(() => {
+    if (isAvulso && (!edital.categorias || edital.categorias.length === 0 || disciplinasCadastradas.length === 0)) {
+      updateState({
+        ...state,
+        edital: {
+          ...state.edital,
+          orgao: state.edital.orgao || "Simulado Avulso",
+          cargo: state.edital.cargo || "Geral",
+          categorias: [
+            {
+              id: "cat_basicos",
+              nome: "Conhecimentos Básicos",
+              disciplinas: [
+                { id: "disc_lp", nome: "Língua Portuguesa", questoes: 10, peso: 1, cor: "#3b82f6", assuntos: [] },
+                { id: "disc_li", nome: "Língua Inglesa", questoes: 10, peso: 1, cor: "#10b981", assuntos: [] }
+              ]
+            },
+            {
+              id: "cat_especificos",
+              nome: "Conhecimentos Específicos",
+              disciplinas: [
+                { id: "disc_ce", nome: "Conhecimentos Específicos", questoes: 50, peso: 1, cor: "#8b5cf6", assuntos: [] }
+              ]
+            }
+          ]
+        }
+      });
+    }
+  }, [isAvulso]);
+
+  const handleImportarMateriasDeCiclo = (ciclo: CicloEstudo) => {
+    if (!ciclo.state?.edital) return;
+    const catCopy = JSON.parse(JSON.stringify(ciclo.state.edital.categorias || []));
+    updateState({
+      ...state,
+      edital: {
+        ...state.edital,
+        orgao: ciclo.orgao || state.edital.orgao,
+        cargo: ciclo.cargoDesejado || state.edital.cargo,
+        banca: ciclo.state.edital.banca || state.edital.banca,
+        categorias: catCopy
+      }
+    });
+    if (ciclo.orgao) setNovoSimuladoOrgao(ciclo.orgao);
+    if (ciclo.cargoDesejado) setNovoSimuladoCargo(ciclo.cargoDesejado);
+  };
+
+  const handleCarregarGradePadrao = () => {
+    updateState({
+      ...state,
+      edital: {
+        ...state.edital,
+        categorias: [
+          {
+            id: "cat_basicos",
+            nome: "Conhecimentos Básicos",
+            disciplinas: [
+              { id: "disc_lp", nome: "Língua Portuguesa", questoes: 10, peso: 1, cor: "#3b82f6", assuntos: [] },
+              { id: "disc_li", nome: "Língua Inglesa", questoes: 10, peso: 1, cor: "#10b981", assuntos: [] }
+            ]
+          },
+          {
+            id: "cat_especificos",
+            nome: "Conhecimentos Específicos",
+            disciplinas: [
+              { id: "disc_ce", nome: "Conhecimentos Específicos", questoes: 50, peso: 1, cor: "#8b5cf6", assuntos: [] }
+            ]
+          }
+        ]
+      }
+    });
+  };
+
+  const handleAdicionarDisciplinaAvulsa = () => {
+    const currentCategorias = JSON.parse(JSON.stringify(edital.categorias || []));
+    let targetCat = currentCategorias[0];
+    if (!targetCat) {
+      targetCat = {
+        id: `cat_${Date.now()}`,
+        nome: "Conhecimentos da Prova",
+        disciplinas: []
+      };
+      currentCategorias.push(targetCat);
+    }
+    const newDisc = {
+      id: `disc_${Date.now()}`,
+      nome: `Nova Matéria ${disciplinasCadastradas.length + 1}`,
+      questoes: 10,
+      peso: 1,
+      cor: "#3b82f6",
+      assuntos: []
+    };
+    targetCat.disciplinas.push(newDisc);
+    updateState({
+      ...state,
+      edital: {
+        ...state.edital,
+        categorias: currentCategorias
+      }
+    });
+  };
+
+  const handleAtualizarDisciplinaAvulsa = (discId: string, field: "nome" | "questoes" | "peso", value: any) => {
+    const currentCategorias = JSON.parse(JSON.stringify(edital.categorias || []));
+    currentCategorias.forEach((cat: any) => {
+      cat.disciplinas.forEach((d: any) => {
+        if (d.id === discId) {
+          d[field] = field === "nome" ? value : Math.max(1, Number(value) || 1);
+        }
+      });
+    });
+    updateState({
+      ...state,
+      edital: {
+        ...state.edital,
+        categorias: currentCategorias
+      }
+    });
+  };
+
+  const handleRemoverDisciplinaAvulsa = (discId: string) => {
+    const currentCategorias = JSON.parse(JSON.stringify(edital.categorias || []));
+    const filtered = currentCategorias.map((cat: any) => ({
+      ...cat,
+      disciplinas: cat.disciplinas.filter((d: any) => d.id !== discId)
+    })).filter((cat: any) => cat.disciplinas.length > 0);
+
+    updateState({
+      ...state,
+      edital: {
+        ...state.edital,
+        categorias: filtered
+      }
+    });
+  };
 
   // Generate question items mapping each question index to a discipline
   const questionsList = useMemo(() => {
@@ -229,9 +366,15 @@ export default function SimuladoView({
     });
 
     // Clamp scores at 0 if non-negative
-    const finalBasica = Math.max(0, parseFloat(pontuacaoBasica.toFixed(2)));
-    const finalEspecifica = Math.max(0, parseFloat(pontuacaoEspecifica.toFixed(2)));
-    const pontuacaoConquistada = parseFloat((finalBasica + finalEspecifica).toFixed(2));
+    let sumSubjectPts = 0;
+    Object.values(subjectStatsMap).forEach(s => {
+      const ptsBrutos = (s.acertos * s.peso) - (s.erros * s.peso * penalidadeErroInput);
+      sumSubjectPts += Math.max(0, ptsBrutos);
+    });
+
+    const finalBasica = Math.max(0, parseFloat(pontuacaoBasica.toFixed(1)));
+    const finalEspecifica = Math.max(0, parseFloat(pontuacaoEspecifica.toFixed(1)));
+    const pontuacaoConquistada = parseFloat(sumSubjectPts.toFixed(1));
 
     return {
       countCertas,
@@ -257,41 +400,20 @@ export default function SimuladoView({
     alert(`Meta de aproveitamento atualizada para ${metaInput}% com sucesso!`);
   };
 
-  // Helper to cross-reference and resolve subject details against the Edital definition
+  // Helper to cross-reference and resolve subject details faithfully
   const resolveSimuladoDetalhesWithEdital = (sim: SimuladoItem): SimuladoMateriaNota[] => {
-    const editalMap = new Map<string, { id: string; nome: string; questoes: number; peso: number; categoriaNome: string }>();
-    disciplinasCadastradas.forEach(d => {
-      const info = {
-        id: d.id,
-        nome: d.nome,
-        questoes: d.questoes || 10,
-        peso: d.peso || 1,
-        categoriaNome: d.categoriaNome || "Conhecimentos"
-      };
-      editalMap.set(d.id, info);
-      editalMap.set(d.nome.trim().toLowerCase(), info);
-    });
-
+    // 1. If sim already has detailed subject scores saved, preserve them exactly!
     if (sim.detalhesMaterias && sim.detalhesMaterias.length > 0) {
       return sim.detalhesMaterias.map(m => {
-        const editalInfo = editalMap.get(m.disciplinaId) || editalMap.get(m.disciplinaNome.trim().toLowerCase());
-        const totalQuestoesMateria = editalInfo?.questoes || m.questoesRespondidas || 10;
-        const pesoMateria = editalInfo?.peso || m.peso || 1;
-        const maxPts = totalQuestoesMateria * pesoMateria;
-
-        let acertos = Number(m.acertos) || 0;
-        // Fix corrupted/duplicated totals where acertos > totalQuestoesMateria
-        if (acertos > totalQuestoesMateria) {
-          if (sim.totalQuestoes > 0 && sim.totalAcertos <= sim.totalQuestoes) {
-            acertos = Math.min(totalQuestoesMateria, Math.round((totalQuestoesMateria / sim.totalQuestoes) * sim.totalAcertos));
-          } else {
-            acertos = Math.min(acertos, totalQuestoesMateria);
-          }
-        }
-
-        const erros = Math.max(0, totalQuestoesMateria - acertos);
-        const pontuacao = Math.max(0, parseFloat((acertos * pesoMateria).toFixed(1)));
-        const aproveitamento = totalQuestoesMateria > 0 ? parseFloat(((acertos / totalQuestoesMateria) * 100).toFixed(1)) : 0;
+        const totalQuestoesMateria = m.questoesRespondidas || 10;
+        const pesoMateria = m.peso || 1;
+        const maxPts = m.pontuacaoMaxima || (totalQuestoesMateria * pesoMateria);
+        const acertos = Number(m.acertos) || 0;
+        const erros = m.erros !== undefined ? Number(m.erros) : Math.max(0, totalQuestoesMateria - acertos);
+        const pontuacao = m.pontuacao !== undefined ? Number(m.pontuacao) : Math.max(0, parseFloat((acertos * pesoMateria).toFixed(1)));
+        const aproveitamento = m.aproveitamento !== undefined 
+          ? Number(m.aproveitamento) 
+          : (totalQuestoesMateria > 0 ? parseFloat(((acertos / totalQuestoesMateria) * 100).toFixed(1)) : 0);
 
         return {
           disciplinaId: m.disciplinaId,
@@ -308,23 +430,47 @@ export default function SimuladoView({
       });
     }
 
-    return disciplinasCadastradas.map(d => {
-      const qCount = d.questoes || 10;
-      const peso = d.peso || 1;
-      const maxPts = qCount * peso;
-      return {
-        disciplinaId: d.id,
-        disciplinaNome: d.nome,
-        questoesRespondidas: qCount,
-        acertos: 0,
-        erros: qCount,
-        anuladas: 0,
-        peso,
-        pontuacao: 0,
-        pontuacaoMaxima: maxPts,
-        aproveitamento: 0
-      };
-    });
+    // 2. If no detalhesMaterias but disciplinasCadastradas exist
+    if (disciplinasCadastradas.length > 0) {
+      return disciplinasCadastradas.map(d => {
+        const qCount = d.questoes || 10;
+        const peso = d.peso || 1;
+        const maxPts = qCount * peso;
+        return {
+          disciplinaId: d.id,
+          disciplinaNome: d.nome,
+          questoesRespondidas: qCount,
+          acertos: 0,
+          erros: qCount,
+          anuladas: 0,
+          peso,
+          pontuacao: 0,
+          pontuacaoMaxima: maxPts,
+          aproveitamento: 0
+        };
+      });
+    }
+
+    // 3. Fallback for standalone mock test with no registered disciplines
+    const totalQ = sim.totalQuestoes || 60;
+    const acertos = sim.totalAcertos || 0;
+    const erros = Math.max(0, totalQ - acertos);
+    const maxPts = sim.pontuacaoMaximaTotal || totalQ;
+    const pontuacao = sim.pontuacaoTotal || acertos;
+    const aproveitamento = sim.aproveitamentoGeral || (totalQ > 0 ? parseFloat(((acertos / totalQ) * 100).toFixed(1)) : 0);
+
+    return [{
+      disciplinaId: "disc_geral",
+      disciplinaNome: sim.cargo ? `Prova Geral (${sim.cargo})` : "Conhecimentos da Prova",
+      questoesRespondidas: totalQ,
+      acertos,
+      erros,
+      anuladas: 0,
+      peso: 1,
+      pontuacao,
+      pontuacaoMaxima: maxPts,
+      aproveitamento
+    }];
   };
 
   const handleOpenSimuladoDetalhes = (sim: SimuladoItem) => {
@@ -345,7 +491,8 @@ export default function SimuladoView({
       const erros = Math.max(0, qTotal - acertos);
       const peso = current.peso || 1;
       const maxPts = qTotal * peso;
-      const pontuacao = parseFloat(Math.max(0, acertos * peso).toFixed(1));
+      const ptsBrutos = (acertos * peso) - (erros * peso * penalidadeErroInput);
+      const pontuacao = parseFloat(Math.max(0, ptsBrutos).toFixed(1));
       const aproveitamento = qTotal > 0 ? parseFloat(((acertos / qTotal) * 100).toFixed(1)) : 0;
 
       updated[index] = {
@@ -375,7 +522,9 @@ export default function SimuladoView({
       sumPtsMax += m.pontuacaoMaxima;
     });
 
-    const aproveitamentoGeral = sumQuestoes > 0 ? parseFloat(((sumAcertos / sumQuestoes) * 100).toFixed(1)) : 0;
+    const aproveitamentoGeral = sumPtsMax > 0 
+      ? parseFloat(((sumPts / sumPtsMax) * 100).toFixed(1)) 
+      : (sumQuestoes > 0 ? parseFloat(((sumAcertos / sumQuestoes) * 100).toFixed(1)) : 0);
 
     const updatedItem: SimuladoItem = {
       ...selectedSimuladoDetalhes,
@@ -480,7 +629,10 @@ export default function SimuladoView({
       }];
     }
 
-    const aproveitamentoGeral = totalPtsMax > 0 ? (gridCalculations.pontuacaoConquistada / totalPtsMax) * 100 : 0;
+    const pontuacaoTotal = parseFloat(detalhesMaterias.reduce((acc, m) => acc + m.pontuacao, 0).toFixed(1));
+    const totalAcertos = detalhesMaterias.reduce((acc, m) => acc + m.acertos, 0);
+    const totalQuestoes = detalhesMaterias.reduce((acc, m) => acc + m.questoesRespondidas, 0);
+    const aproveitamentoGeral = totalPtsMax > 0 ? parseFloat(((pontuacaoTotal / totalPtsMax) * 100).toFixed(1)) : 0;
 
     const novoItem: SimuladoItem = {
       id: "sim_" + Date.now(),
@@ -488,11 +640,11 @@ export default function SimuladoView({
       data: novoSimuladoData,
       cargo: novoSimuladoCargo || edital.cargo || "Geral",
       orgao: novoSimuladoOrgao || edital.orgao || (isAvulso ? "Simulado Avulso" : "Concurso"),
-      pontuacaoTotal: gridCalculations.pontuacaoConquistada,
+      pontuacaoTotal,
       pontuacaoMaximaTotal: totalPtsMax,
-      aproveitamentoGeral: parseFloat(aproveitamentoGeral.toFixed(1)),
-      totalAcertos: gridCalculations.countCertas,
-      totalQuestoes: gridCalculations.totalQuestoes,
+      aproveitamentoGeral,
+      totalAcertos,
+      totalQuestoes,
       detalhesMaterias
     };
 
@@ -1097,27 +1249,8 @@ export default function SimuladoView({
   return (
     <div className="space-y-8 animate-fade-in font-sans">
       {/* HEADER GUIA SIMULADO E SELETOR DE ABAS (# HISTÓRICO # / # GABARITO #) */}
-      <div className={`p-6 rounded-3xl border transition-all ${
-        darkMode ? "bg-[#0c1833] border-[#1d2d52] text-white" : "bg-white border-gray-200 text-gray-900 shadow-sm"
-      }`}>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                {isAvulso ? "SIMULADO IA (AVULSO)" : "GUIA SIMULADO"}
-              </span>
-              <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                {isAvulso
-                  ? "• Registro livre e independente de simulados e provas anteriores"
-                  : `• ${edital.orgao || "Concurso"} - ${edital.cargo || "Cargo Desejado"}`}
-              </span>
-            </div>
-            <h2 className="text-2xl font-black tracking-tight mt-1 font-sans">
-              {isAvulso ? "Simulados & Provas Avulsas" : "Simulados & Acompanhamento de Desempenho"}
-            </h2>
-          </div>
-
-          {/* Abas # HISTÓRICO # e # GABARITO # */}
+      {isAvulso ? (
+        <div className="flex items-center justify-between pb-1">
           <div className="flex items-center p-1 rounded-2xl bg-black/20 dark:bg-white/5 border border-white/10">
             <button
               onClick={() => setActiveTab("historico")}
@@ -1148,7 +1281,58 @@ export default function SimuladoView({
             </button>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className={`p-6 rounded-3xl border transition-all ${
+          darkMode ? "bg-[#0c1833] border-[#1d2d52] text-white" : "bg-white border-gray-200 text-gray-900 shadow-sm"
+        }`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  GUIA SIMULADO
+                </span>
+                <span className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  • {edital.orgao || "Concurso"} - {edital.cargo || "Cargo Desejado"}
+                </span>
+              </div>
+              <h2 className="text-2xl font-black tracking-tight mt-1 font-sans">
+                Simulados & Acompanhamento de Desempenho
+              </h2>
+            </div>
+
+            {/* Abas # HISTÓRICO # e # GABARITO # */}
+            <div className="flex items-center p-1 rounded-2xl bg-black/20 dark:bg-white/5 border border-white/10">
+              <button
+                onClick={() => setActiveTab("historico")}
+                className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  activeTab === "historico"
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                    : darkMode
+                    ? "text-gray-400 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <BarChart2 className="w-4 h-4" />
+                <span># HISTÓRICO #</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("gabarito")}
+                className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  activeTab === "gabarito"
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/30"
+                    : darkMode
+                    ? "text-gray-400 hover:text-white"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <FileCheck className="w-4 h-4" />
+                <span># GABARITO #</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* ABA 1: # HISTÓRICO # (PAINEL DINÂMICO CONFORME REFERÊNCIA VISUAL IMAGE.JPG) */}
@@ -2674,6 +2858,172 @@ export default function SimuladoView({
               )}
             </div>
 
+            {/* SELEÇÃO OU IMPORTAÇÃO DE CICLO (MODO AVULSO) */}
+            {isAvulso && ciclos && ciclos.length > 0 && (
+              <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                darkMode ? "bg-[#112147]/70 border-[#22408a]/60" : "bg-blue-50/70 border-blue-200"
+              }`}>
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-blue-400">
+                      Importar Matérias de um Ciclo de Estudos (Opcional):
+                    </span>
+                    <span className={`text-[11px] ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                      Copia instantaneamente a mesma estrutura de matérias, divisão de questões e pesos para esta prova avulsa.
+                    </span>
+                  </div>
+                </div>
+                <select
+                  onChange={(e) => {
+                    const cicloId = e.target.value;
+                    if (!cicloId) return;
+                    const found = ciclos.find(c => c.id === cicloId);
+                    if (found) handleImportarMateriasDeCiclo(found);
+                  }}
+                  defaultValue=""
+                  className={`p-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                    darkMode ? "bg-[#0c1833] border-[#22408a] text-white" : "bg-white border-gray-300 text-gray-900"
+                  }`}
+                >
+                  <option value="" disabled>Copiar estrutura de um ciclo...</option>
+                  {ciclos.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.orgao} • {c.cargoDesejado}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* DISTRIBUIÇÃO DE MATÉRIAS, QUANTIDADE DE QUESTÕES E PESOS */}
+            <div className={`p-4 rounded-2xl border space-y-3 ${
+              darkMode ? "bg-[#112147]/50 border-[#22408a]/40" : "bg-gray-50 border-gray-200"
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4" />
+                    Distribuição de Matérias, Questões e Pesos da Prova
+                  </span>
+                  <span className={`text-[11px] block mt-0.5 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                    As questões do gabarito abaixo seguem esta ordem de matérias (Total: {questionsList.length} questões). Os cálculos de pontuação respeitam exatamente os pesos e penalidades de cada matéria.
+                  </span>
+                </div>
+                {isAvulso && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleCarregarGradePadrao}
+                      className="px-2.5 py-1.5 rounded-lg border border-blue-500/40 text-blue-400 hover:bg-blue-500/20 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Padrão 70 Qts (Port/Ing/Esp)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAdicionarDisciplinaAvulsa}
+                      className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar Matéria</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {disciplinasCadastradas.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                  {disciplinasCadastradas.map((d) => (
+                    <div
+                      key={d.id}
+                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                        darkMode ? "bg-[#0c1833] border-[#1d2f59]" : "bg-white border-gray-200 shadow-sm"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        {isAvulso ? (
+                          <input
+                            type="text"
+                            value={d.nome}
+                            onChange={(e) => handleAtualizarDisciplinaAvulsa(d.id, "nome", e.target.value)}
+                            className={`w-full bg-transparent font-bold text-xs outline-none border-b border-transparent focus:border-blue-500 ${
+                              darkMode ? "text-white" : "text-gray-900"
+                            }`}
+                          />
+                        ) : (
+                          <span className="font-bold text-xs truncate block" title={d.nome}>{d.nome}</span>
+                        )}
+                        <span className="text-[10px] text-gray-400 block truncate">{d.categoriaNome || "Conhecimentos"}</span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="text-right">
+                          <label className="text-[9px] text-gray-400 uppercase block leading-tight">Qts</label>
+                          {isAvulso ? (
+                            <input
+                              type="number"
+                              min={1}
+                              max={150}
+                              value={d.questoes || 10}
+                              onChange={(e) => handleAtualizarDisciplinaAvulsa(d.id, "questoes", e.target.value)}
+                              className={`w-12 p-1 rounded text-xs font-mono font-bold text-center border outline-none ${
+                                darkMode ? "bg-[#112147] border-[#22408a] text-white" : "bg-gray-100 border-gray-300 text-gray-900"
+                              }`}
+                            />
+                          ) : (
+                            <span className="font-mono font-bold text-xs text-blue-400">{d.questoes || 10}</span>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <label className="text-[9px] text-gray-400 uppercase block leading-tight">Peso</label>
+                          {isAvulso ? (
+                            <input
+                              type="number"
+                              min={1}
+                              max={10}
+                              step={0.5}
+                              value={d.peso || 1}
+                              onChange={(e) => handleAtualizarDisciplinaAvulsa(d.id, "peso", e.target.value)}
+                              className={`w-12 p-1 rounded text-xs font-mono font-bold text-center border outline-none ${
+                                darkMode ? "bg-[#112147] border-[#22408a] text-white" : "bg-gray-100 border-gray-300 text-gray-900"
+                              }`}
+                            />
+                          ) : (
+                            <span className="font-mono font-bold text-xs text-purple-400">{d.peso || 1}</span>
+                          )}
+                        </div>
+
+                        {isAvulso && disciplinasCadastradas.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoverDisciplinaAvulsa(d.id)}
+                            className="p-1 text-gray-400 hover:text-rose-400 transition-colors"
+                            title="Remover matéria da prova"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-gray-500/30 text-center space-y-2">
+                  <p className="text-xs text-gray-400">Nenhuma matéria configurada ainda para esta prova avulsa.</p>
+                  <button
+                    type="button"
+                    onClick={handleCarregarGradePadrao}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
+                  >
+                    Carregar Grade Padrão (Português, Inglês, Específicos)
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* BARRA DE PREENCHIMENTO RÁPIDO / COLAR SEQUÊNCIA */}
             <div className={`p-4 rounded-2xl border space-y-3 ${
               darkMode ? "bg-[#112147]/60 border-[#22408a]/50" : "bg-gray-50 border-gray-200"
@@ -2908,9 +3258,9 @@ export default function SimuladoView({
         const modalTotalQuestoes = editMateriasList.reduce((acc, m) => acc + (Number(m.questoesRespondidas) || 0), 0);
         const modalPontuacaoTotal = editMateriasList.reduce((acc, m) => acc + (Number(m.pontuacao) || 0), 0);
         const modalPontuacaoMax = editMateriasList.reduce((acc, m) => acc + (Number(m.pontuacaoMaxima) || 0), 0);
-        const modalAproveitamentoGeral = modalTotalQuestoes > 0 
-          ? parseFloat(((modalTotalAcertos / modalTotalQuestoes) * 100).toFixed(1)) 
-          : 0;
+        const modalAproveitamentoGeral = modalPontuacaoMax > 0 
+          ? parseFloat(((modalPontuacaoTotal / modalPontuacaoMax) * 100).toFixed(1)) 
+          : (modalTotalQuestoes > 0 ? parseFloat(((modalTotalAcertos / modalTotalQuestoes) * 100).toFixed(1)) : 0);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">

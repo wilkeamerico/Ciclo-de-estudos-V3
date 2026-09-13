@@ -303,6 +303,7 @@ export default function PainelGeral({
               onVoltarParaCiclos={() => setPainelTab("ciclos")}
               isPainelGeral={true}
               isAvulso={true}
+              ciclos={ciclos}
             />
           </div>
         ) : (
