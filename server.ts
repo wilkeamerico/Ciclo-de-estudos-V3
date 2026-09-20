@@ -35,7 +35,12 @@ function getGeminiClient() {
 
 // Helper to call Gemini with exponential backoff retries and model fallback
 async function callGeminiWithRetry(client: GoogleGenAI, params: any) {
-  const modelsToTry = ["gemini-3.6-flash", "gemini-3.1-flash-lite"];
+  // Primary and fallback models according to Google GenAI best practices
+  const modelsToTry = [
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+  ];
   let lastError: any = null;
 
   for (const model of modelsToTry) {
@@ -50,15 +55,18 @@ async function callGeminiWithRetry(client: GoogleGenAI, params: any) {
         lastError = err;
         const errStr = (err?.message || "") + " " + JSON.stringify(err || "");
         const isRateLimit = errStr.includes("429") || errStr.includes("RESOURCE_EXHAUSTED");
-        const isOverloaded = errStr.includes("503") || errStr.includes("UNAVAILABLE") || errStr.includes("high demand");
+        const isOverloaded = errStr.includes("503") || errStr.includes("UNAVAILABLE") || errStr.includes("high demand") || errStr.includes("Spikes in demand") || errStr.includes("overloaded");
+        const isTransient = isRateLimit || isOverloaded || errStr.includes("500") || errStr.includes("502") || errStr.includes("504") || errStr.includes("fetch failed");
 
-        if (isRateLimit || isOverloaded) {
-          console.warn(`[Gemini API] Modelo ${model} (tentativa ${attempt}/3) erro temporário (${isRateLimit ? "429 RateLimit" : "503 Overloaded"}). Aguardando...`);
+        if (isTransient) {
+          console.warn(`[Gemini API] Modelo ${model} (tentativa ${attempt}/3) erro temporário (${isRateLimit ? "429 RateLimit" : isOverloaded ? "503 Overloaded" : "Erro de Rede/Servidor"}). Aguardando...`);
           if (attempt < 3) {
-            await new Promise((res) => setTimeout(res, attempt * 2000));
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1) + Math.random() * 500, 6000);
+            await new Promise((res) => setTimeout(res, backoffMs));
           }
         } else {
-          throw err;
+          console.warn(`[Gemini API] Erro não transiente no modelo ${model}:`, err?.message || err);
+          break; // Try next model
         }
       }
     }
@@ -820,6 +828,383 @@ Realize o OCR/leitura com máxima atenção e transcreva todo o texto na íntegr
       userMsg = "Os servidores da IA estão com alta demanda temporária. Por favor, tente novamente em alguns instantes.";
     }
     return res.status(500).json({ error: userMsg });
+  }
+});
+
+// Sanitize base64 data strings (remove data URI prefixes)
+function sanitizeBase64(raw?: string): string {
+  if (!raw) return "";
+  return raw.replace(/^data:[^;]+;base64,/, "").trim();
+}
+
+// Safe JSON parser handling potential markdown wrappers
+function safeParseJson(rawText: string | undefined): any {
+  if (!rawText) return {};
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```$/, "");
+  }
+  return JSON.parse(cleaned);
+}
+
+// Friendly error message translator
+function extractFriendlyErrorMessage(error: any): string {
+  if (!error) return "Erro desconhecido ao processar com IA.";
+  const msg = error.message || String(error);
+  if (msg.includes("503") || msg.includes("high demand") || msg.includes("UNAVAILABLE") || msg.includes("Spikes in demand")) {
+    return "Os servidores da IA estão temporariamente com pico de demanda (503). O sistema tentou modelos alternativos e retentativas automáticas. Por favor, tente novamente em alguns instantes.";
+  }
+  if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota")) {
+    return "Limite temporário de requisições por minuto atingido. Aguarde alguns instantes e tente novamente.";
+  }
+  if (msg.includes("GEMINI_API_KEY") || msg.includes("api key")) {
+    return "Chave de API do Gemini não configurada ou inválida nas configurações.";
+  }
+  return msg;
+}
+
+// Analyze Exam Endpoint (Conferir-provas / Simulado IA)
+app.post("/api/analyze-exam", async (req, res) => {
+  try {
+    const {
+      examTitle,
+      candidateAnswers, // e.g. { "1": "A", "2": "C" }
+      officialAnswerKey, // string text or object { "1": "B", ... }
+      examPaper, // { name, mimeType, data (base64), text }
+      syllabus, // { name, mimeType, data (base64), text }
+      officialKeyDoc, // { name, mimeType, data (base64), text }
+      totalQuestions = 30,
+    } = req.body;
+
+    const ai = getGeminiClient();
+
+    // Prepare prompt parts
+    const parts: any[] = [];
+
+    let promptText = `Você é um Especialista Sênior em Concursos Públicos, Avaliação Pedagógica e Inteligência Artificial Educacional.
+Sua missão é realizar a CORREÇÃO COMPLETA, ANÁLISE DE DESEMPENHO ESTATÍSTICA E PEDAGÓGICA, E PLANO DE ESTUDOS PERSONALIZADO para o candidato.
+
+DADOS FORNECIDOS:
+- Nome/Título da Prova/Simulado: ${examTitle || "Exame / Concurso"}
+- Total de Questões esperadas: ${totalQuestions}
+- Respostas assinaladas pelo candidato (Gabarito do Aluno):
+${JSON.stringify(candidateAnswers, null, 2)}`;
+
+    if (officialAnswerKey && typeof officialAnswerKey === "object") {
+      promptText += `\n- Gabarito Oficial fornecido textualmente:\n${JSON.stringify(officialAnswerKey, null, 2)}\n`;
+    }
+
+    promptText += `
+INSTRUÇÕES DE ANÁLISE:
+1. Examine os arquivos anexados (Caderno de Provas, Edital/Conteúdo Programático e Gabarito Oficial).
+2. Se o gabarito oficial estiver no documento ou imagem anexada, extraia as respostas oficiais corretas para cada questão de 1 até ${totalQuestions}.
+3. Compare meticulosamente a resposta do candidato com a resposta oficial:
+   - status: 'CORRECT' (se bate), 'WRONG' (se errou), 'BLANK' (se o candidato deixou em branco ou nulo), ou 'ANNULLED' (se a questão foi anulada pela banca).
+4. Para CADA questão (de 1 até ${totalQuestions}), determine:
+   - questionNumber: número da questão
+   - discipline: disciplina principal (ex: Língua Portuguesa, Raciocínio Lógico-Matemático, Direito Constitucional, Direito Administrativo, Conhecimentos Específicos, etc.)
+   - topic: assunto ou tópico específico dentro do edital (ex: 'Crase', 'Equações de 2º Grau', 'Atos Administrativos', 'Controle de Constitucionalidade', etc.)
+   - difficulty: 'FÁCIL', 'MÉDIA' ou 'DIFÍCIL'
+   - officialAnswer: alternativa correta oficial ('A', 'B', 'C', 'D', 'E', 'C' ou 'E' para certo/errado)
+   - candidateAnswer: alternativa assinalada pelo candidato (ou null/'-')
+   - isCorrect: boolean
+   - explanation: explicação concisa, didática e profunda do porquê a resposta oficial está certa e onde o candidato pode ter caído em pegadinha se tiver errado
+   - editalReference: cláusula ou item correspondente do conteúdo programático do edital
+   - canAppeal: boolean (se há vício evidente, dupla interpretação ou divergência doutrinária passível de recurso contra a banca)
+   - appealReason: justificativa técnica para recurso (se canAppeal for true, senão vazio)
+5. Calcule as estatísticas gerais:
+   - totalQuestions, totalCorrect, totalWrong, totalBlank, totalAnnulled, scorePercentage
+   - estimatedCutoffScore: estimativa realista da nota de corte baseada no edital / tipo de prova
+   - performanceTier: classificação ('Excelente - Competitivo', 'Bom - Ajustar Detalhes', 'Intermediário - Necessita Reforço', 'Iniciante - Base Frágil')
+6. Gere a Análise por Disciplina:
+   - Para cada disciplina identificada:
+     - discipline: nome
+     - weight: peso no edital (ex: 1.0, 1.5, 2.0)
+     - totalQuestions, correctCount, wrongCount, blankCount, accuracyPercentage
+     - diagnosis: diagnóstico do desempenho (pontos fortes e vulnerabilidades)
+     - recommendedAction: ação imediata de estudo
+7. Diagnóstico dos Maiores Erros (Gaps de Conhecimento):
+   - Liste os 3 a 5 tópicos mais críticos onde o candidato perdeu pontos
+8. Cronograma e Plano de Estudos Personalizado (Acompanhamento):
+   - summary: visão geral da rota de evolução
+   - weeklyPlan: array de 4 semanas com foco prioritário, disciplinas, carga horária sugerida e estratégia de revisão (ex: resolução de questões, revisão de lei seca, teoria)
+   - smartTips: 3 conselhos práticos e motivacionais de alta eficiência.
+
+Retorne ESTRITAMENTE em formato JSON compatível com o schema requisitado.`;
+
+    parts.push({ text: promptText });
+
+    // Attach exam paper if provided
+    if (examPaper?.data && examPaper?.mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: examPaper.mimeType,
+          data: sanitizeBase64(examPaper.data),
+        },
+      });
+      parts.push({ text: `[Arquivo anexado acima: Caderno de Provas - ${examPaper.name || "caderno"}]` });
+    } else if (examPaper?.text) {
+      parts.push({ text: `[Texto do Caderno de Provas]:\n${examPaper.text}` });
+    }
+
+    // Attach syllabus if provided
+    if (syllabus?.data && syllabus?.mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: syllabus.mimeType,
+          data: sanitizeBase64(syllabus.data),
+        },
+      });
+      parts.push({ text: `[Arquivo anexado acima: Edital / Conteúdo Programático - ${syllabus.name || "edital"}]` });
+    } else if (syllabus?.text) {
+      parts.push({ text: `[Texto do Edital / Conteúdo Programático]:\n${syllabus.text}` });
+    }
+
+    // Attach official answer key doc if provided
+    if (officialKeyDoc?.data && officialKeyDoc?.mimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: officialKeyDoc.mimeType,
+          data: sanitizeBase64(officialKeyDoc.data),
+        },
+      });
+      parts.push({ text: `[Arquivo anexado acima: Gabarito Oficial - ${officialKeyDoc.name || "gabarito"}]` });
+    } else if (officialKeyDoc?.text) {
+      parts.push({ text: `[Texto do Gabarito Oficial]:\n${officialKeyDoc.text}` });
+    }
+
+    const response = await callGeminiWithRetry(ai, {
+      contents: { parts },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            examTitle: { type: Type.STRING },
+            summary: {
+              type: Type.OBJECT,
+              properties: {
+                totalQuestions: { type: Type.INTEGER },
+                totalCorrect: { type: Type.INTEGER },
+                totalWrong: { type: Type.INTEGER },
+                totalBlank: { type: Type.INTEGER },
+                totalAnnulled: { type: Type.INTEGER },
+                scorePercentage: { type: Type.NUMBER },
+                weightedScore: { type: Type.NUMBER },
+                estimatedCutoffScore: { type: Type.NUMBER },
+                performanceTier: { type: Type.STRING },
+                generalDiagnosis: { type: Type.STRING },
+              },
+              required: [
+                "totalQuestions",
+                "totalCorrect",
+                "totalWrong",
+                "scorePercentage",
+                "performanceTier",
+                "generalDiagnosis",
+              ],
+            },
+            disciplines: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  discipline: { type: Type.STRING },
+                  weight: { type: Type.NUMBER },
+                  totalQuestions: { type: Type.INTEGER },
+                  correctCount: { type: Type.INTEGER },
+                  wrongCount: { type: Type.INTEGER },
+                  blankCount: { type: Type.INTEGER },
+                  accuracyPercentage: { type: Type.NUMBER },
+                  diagnosis: { type: Type.STRING },
+                  recommendedAction: { type: Type.STRING },
+                },
+                required: [
+                  "discipline",
+                  "totalQuestions",
+                  "correctCount",
+                  "wrongCount",
+                  "accuracyPercentage",
+                ],
+              },
+            },
+            questions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  questionNumber: { type: Type.INTEGER },
+                  discipline: { type: Type.STRING },
+                  topic: { type: Type.STRING },
+                  difficulty: { type: Type.STRING },
+                  candidateAnswer: { type: Type.STRING },
+                  officialAnswer: { type: Type.STRING },
+                  status: { type: Type.STRING }, // 'CORRECT' | 'WRONG' | 'BLANK' | 'ANNULLED'
+                  explanation: { type: Type.STRING },
+                  editalReference: { type: Type.STRING },
+                  canAppeal: { type: Type.BOOLEAN },
+                  appealReason: { type: Type.STRING },
+                },
+                required: [
+                  "questionNumber",
+                  "discipline",
+                  "topic",
+                  "officialAnswer",
+                  "status",
+                  "explanation",
+                ],
+              },
+            },
+            criticalWeaknesses: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  topic: { type: Type.STRING },
+                  discipline: { type: Type.STRING },
+                  missedCount: { type: Type.INTEGER },
+                  priority: { type: Type.STRING }, // 'ALTA' | 'MÉDIA' | 'CRÍTICA'
+                  actionGuide: { type: Type.STRING },
+                },
+                required: ["topic", "discipline", "priority", "actionGuide"],
+              },
+            },
+            studyPlan: {
+              type: Type.OBJECT,
+              properties: {
+                overallStrategy: { type: Type.STRING },
+                recommendedDailyHours: { type: Type.NUMBER },
+                weeklyCycles: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      week: { type: Type.INTEGER },
+                      title: { type: Type.STRING },
+                      primaryFocus: { type: Type.STRING },
+                      disciplinesToReview: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      actionSteps: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      milestoneGoal: { type: Type.STRING },
+                    },
+                    required: ["week", "title", "primaryFocus", "actionSteps"],
+                  },
+                },
+                smartTips: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+              },
+              required: ["overallStrategy", "weeklyCycles", "smartTips"],
+            },
+          },
+          required: [
+            "examTitle",
+            "summary",
+            "disciplines",
+            "questions",
+            "criticalWeaknesses",
+            "studyPlan",
+          ],
+        },
+      },
+    });
+
+    const parsedData = safeParseJson(response.text);
+    return res.json({ success: true, data: parsedData });
+  } catch (error: any) {
+    console.error("Erro na análise da prova:", error);
+    const friendlyError = extractFriendlyErrorMessage(error);
+    return res.status(500).json({
+      success: false,
+      error: friendlyError,
+    });
+  }
+});
+
+// Flashcards and Smart Review Topic Generator Endpoint
+app.post("/api/generate-topic-study", async (req, res) => {
+  try {
+    const { topic, discipline, errorContext } = req.body;
+    const ai = getGeminiClient();
+
+    const prompt = `Você é um mentor especialista em aprovação em concursos.
+O aluno errou questões sobre o assunto: "${topic}" na disciplina "${discipline}".
+Contexto adicional do erro: "${errorContext || "Dificuldade na aplicação prática dos conceitos"}".
+
+Gere um mini-material de revisão acelerada contendo:
+1. Resumo Flash do Conteúdo (regras essenciais, fórmulas ou mnemônicos)
+2. 3 Flashcards (Pergunta desafiadora e Resposta comentada)
+3. 2 Questões inéditas de fixação com gabarito comentado
+4. Pegadinhas mais comuns de bancas examinadoras neste assunto.`;
+
+    const response = await callGeminiWithRetry(ai, {
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            topic: { type: Type.STRING },
+            discipline: { type: Type.STRING },
+            flashSummary: { type: Type.STRING },
+            mnemonics: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            commonTraps: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            flashcards: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  front: { type: Type.STRING },
+                  back: { type: Type.STRING },
+                },
+                required: ["front", "back"],
+              },
+            },
+            practiceQuestions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  statement: { type: Type.STRING },
+                  options: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                  },
+                  correctOptionIndex: { type: Type.INTEGER },
+                  explanation: { type: Type.STRING },
+                },
+                required: ["statement", "options", "correctOptionIndex", "explanation"],
+              },
+            },
+          },
+          required: ["topic", "discipline", "flashSummary", "flashcards", "practiceQuestions"],
+        },
+      },
+    });
+
+    const parsed = safeParseJson(response.text);
+    return res.json({ success: true, data: parsed });
+  } catch (error: any) {
+    console.error("Erro ao gerar revisão de tópico:", error);
+    const friendlyError = extractFriendlyErrorMessage(error);
+    return res.status(500).json({
+      success: false,
+      error: friendlyError,
+    });
   }
 });
 

@@ -237,9 +237,12 @@ export default function PlanningView({ state, updateState, darkMode }: PlanningV
         const pesoPercentual = calcularPesoPercentual(d, somaPontos);
         const horasTotaisCalculadas = Math.round(metaHorasTotal * (pesoPercentual / 100));
 
-        const horasTotais = d.horasTotais || horasTotaisCalculadas;
-        const divisorSugerido = horasTotais > 0 ? parseFloat((metaHorasTotal / horasTotais).toFixed(2)) : 1.5;
-        const horasPorCiclo = d.horasPorCiclo || (divisorSugerido > 0 && divisorSugerido < 4 ? divisorSugerido : 1.5);
+        const horasTotais = (d.horasTotais !== undefined && d.horasTotais > 0)
+          ? d.horasTotais
+          : (horasTotaisCalculadas > 0 ? horasTotaisCalculadas : 10);
+        const horasPorCiclo = (d.horasPorCiclo !== undefined && d.horasPorCiclo > 0)
+          ? d.horasPorCiclo
+          : 1.5;
         const ciclosTotais = Math.max(1, Math.round(horasTotais / horasPorCiclo));
 
         list.push({

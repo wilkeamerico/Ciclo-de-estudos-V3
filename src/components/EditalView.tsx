@@ -31,11 +31,31 @@ interface EditalViewProps {
 
 type ScanStatus = "INICIAR" | "EM ANDAMENTO" | "CONCLUIDO";
 
+// Helper to ensure every category, discipline and topic has a unique id
+const ensureEditalIds = (raw: Edital): Edital => {
+  if (!raw) return raw;
+  return {
+    ...raw,
+    categorias: (raw.categorias || []).map((cat, cIdx) => ({
+      ...cat,
+      id: cat.id || `cat_gen_${cIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      disciplinas: (cat.disciplinas || []).map((disc, dIdx) => ({
+        ...disc,
+        id: disc.id || `disc_gen_${cIdx}_${dIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        assuntos: (disc.assuntos || []).map((ass, aIdx) => ({
+          ...ass,
+          id: ass.id || `ass_gen_${cIdx}_${dIdx}_${aIdx}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+        }))
+      }))
+    }))
+  };
+};
+
 export default function EditalView({ state, updateState, darkMode }: EditalViewProps) {
   const { edital } = state;
 
   // Local copy of edital to allow user to make adjustments and click SALVAR
-  const [localEdital, setLocalEdital] = useState<Edital>(() => JSON.parse(JSON.stringify(edital)));
+  const [localEdital, setLocalEdital] = useState<Edital>(() => ensureEditalIds(JSON.parse(JSON.stringify(edital))));
   const [activeSubTab, setActiveSubTab] = useState<"manual" | "ia">("manual");
 
   // IA Scan states
@@ -53,7 +73,7 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
 
   // Sync local edital if global edital changes (like after a sync or reload)
   React.useEffect(() => {
-    setLocalEdital(JSON.parse(JSON.stringify(edital)));
+    setLocalEdital(ensureEditalIds(JSON.parse(JSON.stringify(edital))));
     setCargoInput(edital.cargo || "");
   }, [edital]);
 
@@ -62,6 +82,18 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
   const totalQuestoesGeral = useMemo(() => {
     return localEdital.categorias.reduce((acc, cat) => {
       return acc + cat.disciplinas.reduce((dAcc, d) => dAcc + (d.questoes || 0), 0);
+    }, 0);
+  }, [localEdital]);
+
+  const totalCargaHorariaGeral = useMemo(() => {
+    return localEdital.categorias.reduce((acc, cat) => {
+      return acc + cat.disciplinas.reduce((dAcc, d) => dAcc + (d.horasTotais || 0), 0);
+    }, 0);
+  }, [localEdital]);
+
+  const totalHorasPorCicloGeral = useMemo(() => {
+    return localEdital.categorias.reduce((acc, cat) => {
+      return acc + cat.disciplinas.reduce((dAcc, d) => dAcc + (d.horasPorCiclo || 0), 0);
     }, 0);
   }, [localEdital]);
 
@@ -77,22 +109,22 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
   // --- ADD / EXCLUDE DISCIPLINE OR KNOWLEDGE AREA ---
   const handleAddArea = () => {
     const novaArea: Categoria = {
-      id: "cat_" + Date.now(),
+      id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       nome: "NOVA ÁREA DE CONHECIMENTO",
       disciplinas: []
     };
-    setLocalEdital({
-      ...localEdital,
-      categorias: [...localEdital.categorias, novaArea]
-    });
+    setLocalEdital((prev) => ({
+      ...prev,
+      categorias: [...prev.categorias, novaArea]
+    }));
   };
 
   const handleDeleteArea = (catId: string) => {
     if (confirm("Deseja realmente excluir toda esta Área de Conhecimento e suas matérias?")) {
-      setLocalEdital({
-        ...localEdital,
-        categorias: localEdital.categorias.filter((cat) => cat.id !== catId)
-      });
+      setLocalEdital((prev) => ({
+        ...prev,
+        categorias: prev.categorias.filter((cat) => cat.id !== catId)
+      }));
     }
   };
 
@@ -101,18 +133,19 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
     const randomCor = cores[Math.floor(Math.random() * cores.length)];
 
     const novaDisc: Disciplina = {
-      id: "disc_" + Date.now(),
+      id: `disc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       nome: "Nova Disciplina",
       questoes: 10,
       peso: 1,
       cor: randomCor,
-      assuntos: [],
-      horasPorCiclo: 1.0
+      horasTotais: 15,
+      horasPorCiclo: 1.5,
+      assuntos: []
     };
 
-    setLocalEdital({
-      ...localEdital,
-      categorias: localEdital.categorias.map((cat) => {
+    setLocalEdital((prev) => ({
+      ...prev,
+      categorias: prev.categorias.map((cat) => {
         if (cat.id === catId) {
           return {
             ...cat,
@@ -121,13 +154,13 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
         }
         return cat;
       })
-    });
+    }));
   };
 
   const handleDeleteDisciplina = (catId: string, discId: string) => {
-    setLocalEdital({
-      ...localEdital,
-      categorias: localEdital.categorias.map((cat) => {
+    setLocalEdital((prev) => ({
+      ...prev,
+      categorias: prev.categorias.map((cat) => {
         if (cat.id === catId) {
           return {
             ...cat,
@@ -136,35 +169,31 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
         }
         return cat;
       })
-    });
+    }));
   };
 
   const handleUpdateDisciplinaField = (
     catId: string,
     discId: string,
-    field: "nome" | "questoes" | "peso" | "cor",
+    field: "nome" | "questoes" | "peso" | "cor" | "horasTotais" | "horasPorCiclo",
     val: any
   ) => {
-    setLocalEdital({
-      ...localEdital,
-      categorias: localEdital.categorias.map((cat) => {
-        if (cat.id === catId) {
-          return {
-            ...cat,
-            disciplinas: cat.disciplinas.map((d) => {
-              if (d.id === discId) {
-                return {
-                  ...d,
-                  [field]: val
-                };
-              }
-              return d;
-            })
-          };
-        }
-        return cat;
+    setLocalEdital((prev) => ({
+      ...prev,
+      categorias: prev.categorias.map((cat) => {
+        if (cat.id !== catId) return cat;
+        return {
+          ...cat,
+          disciplinas: cat.disciplinas.map((d) => {
+            if (d.id !== discId) return d;
+            return {
+              ...d,
+              [field]: val
+            };
+          })
+        };
       })
-    });
+    }));
   };
 
   // --- IA EDITAL SCANNING HANDLER ---
@@ -344,7 +373,7 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
             </div>
 
             {/* Barra Consolidada da Soma Geral */}
-            <div className={`p-4 rounded-xl border grid grid-cols-1 sm:grid-cols-3 gap-4 ${
+            <div className={`p-4 rounded-xl border grid grid-cols-2 sm:grid-cols-4 gap-4 ${
               darkMode ? "bg-[#111e3b]/80 border-[#1e2d4d]" : "bg-gray-50/80 border-gray-200"
             }`}>
               <div className="flex flex-col items-center sm:items-start">
@@ -352,39 +381,50 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
                   TOTAL DE QUESTÕES
                 </span>
                 <span className="text-xl font-black text-blue-500 mt-0.5">
-                  {totalQuestoesGeral} Questões
+                  {totalQuestoesGeral} Qs
                 </span>
               </div>
 
-              <div className="flex flex-col items-center sm:items-start border-t sm:border-t-0 sm:border-l border-gray-200 dark:border-gray-800 pt-2 sm:pt-0 sm:pl-4">
+              <div className="flex flex-col items-center sm:items-start border-l border-gray-200 dark:border-gray-800 pl-4">
                 <span className={`text-[10px] font-extrabold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                   PONTUAÇÃO TOTAL
                 </span>
                 <span className="text-xl font-black text-amber-500 mt-0.5">
-                  {somaPontos} Pontos
+                  {somaPontos} Pts
                 </span>
               </div>
 
-              <div className="flex flex-col items-center sm:items-start border-t sm:border-t-0 sm:border-l border-gray-200 dark:border-gray-800 pt-2 sm:pt-0 sm:pl-4">
+              <div className="flex flex-col items-center sm:items-start border-l border-gray-200 dark:border-gray-800 pl-4">
                 <span className={`text-[10px] font-extrabold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  PERCENTUAL TOTAL
+                  CARGA HORÁRIA TOTAL
                 </span>
                 <span className="text-xl font-black text-emerald-500 mt-0.5">
-                  100.0% da Prova
+                  {totalCargaHorariaGeral}h
+                </span>
+              </div>
+
+              <div className="flex flex-col items-center sm:items-start border-l border-gray-200 dark:border-gray-800 pl-4">
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  HORAS POR CICLO
+                </span>
+                <span className="text-xl font-black text-purple-500 mt-0.5">
+                  {totalHorasPorCicloGeral.toFixed(1)}h
                 </span>
               </div>
             </div>
           </div>
 
           {/* LISTAGEM DE CATEGORIAS / BLOCOS */}
-          {localEdital.categorias.map((cat) => {
+          {localEdital.categorias.map((cat, cIdx) => {
             const totalQuestoesCat = cat.disciplinas.reduce((acc, d) => acc + (d.questoes || 0), 0);
             const pontosCat = cat.disciplinas.reduce((acc, d) => acc + ((d.questoes || 0) * (d.peso || 1)), 0);
+            const cargaHorariaCat = cat.disciplinas.reduce((acc, d) => acc + (d.horasTotais || 0), 0);
             const pctCat = somaPontos > 0 ? ((pontosCat / somaPontos) * 100).toFixed(1) : "0.0";
+            const categoryKey = cat.id || `category_${cIdx}_${cat.nome || "area"}`;
 
             return (
               <div
-                key={cat.id}
+                key={categoryKey}
                 className={`p-6 rounded-2xl border transition-colors space-y-4 ${
                   darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
                 }`}
@@ -394,15 +434,15 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
                     type="text"
                     value={cat.nome}
                     onChange={(e) => {
-                      setLocalEdital({
-                        ...localEdital,
-                        categorias: localEdital.categorias.map((c) => {
+                      setLocalEdital((prev) => ({
+                        ...prev,
+                        categorias: prev.categorias.map((c) => {
                           if (c.id === cat.id) {
                             return { ...c, nome: e.target.value.toUpperCase() };
                           }
                           return c;
                         })
-                      });
+                      }));
                     }}
                     className={`text-sm font-extrabold uppercase tracking-widest outline-none bg-transparent ${
                       darkMode ? "text-white focus:border-b focus:border-blue-500" : "text-gray-800 focus:border-b focus:border-blue-600"
@@ -411,7 +451,7 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
 
                   <button
                     onClick={() => handleDeleteArea(cat.id)}
-                    className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-semibold border transition-all ${
+                    className={`flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-semibold border transition-all cursor-pointer ${
                       darkMode
                         ? "border-[#2d3f66] bg-red-950/20 hover:bg-red-950/45 text-red-400"
                         : "border-red-200 bg-red-50 hover:bg-red-100 text-red-600"
@@ -424,7 +464,7 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
 
                 {/* TABELA DE MATÉRIAS DENTRO DO BLOCO */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
                     <thead>
                       <tr className={`text-[10px] uppercase font-bold tracking-wider border-b border-gray-100/10 ${
                         darkMode ? "text-gray-400" : "text-gray-500"
@@ -432,36 +472,47 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
                         <th className="py-2.5 px-3">Cor & Disciplina</th>
                         <th className="py-2.5 px-3 text-center">Questões</th>
                         <th className="py-2.5 px-3 text-center">Peso</th>
+                        <th className="py-2.5 px-3 text-center">Carga Horária (h)</th>
+                        <th className="py-2.5 px-3 text-center">Horas / Ciclo</th>
                         <th className="py-2.5 px-3 text-center">Total (%)</th>
-                        <th className="py-2.5 px-3 text-center">Excluir</th>
+                        <th className="py-2.5 px-3 text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {cat.disciplinas.map((disc) => {
-                        const pontosDisc = disc.questoes * disc.peso;
+                      {cat.disciplinas.map((disc, dIdx) => {
+                        const pontosDisc = (disc.questoes || 0) * (disc.peso || 1);
                         const totalPerc = somaPontos > 0 ? ((pontosDisc / somaPontos) * 100).toFixed(1) : "0.0";
+                        const currentCor = disc.cor || "#3b82f6";
+                        const currentQuestoes = disc.questoes || 0;
+                        const currentPeso = disc.peso || 1;
+                        const currentHorasTotais = disc.horasTotais !== undefined ? disc.horasTotais : 10;
+                        const currentHorasPorCiclo = disc.horasPorCiclo !== undefined ? disc.horasPorCiclo : 1.5;
+                        const discKey = disc.id || `disc_${categoryKey}_${dIdx}_${disc.nome || "mat"}`;
 
                         return (
                           <tr
-                            key={disc.id}
+                            key={discKey}
                             className={`border-b border-gray-100/5 transition-colors ${
                               darkMode ? "hover:bg-[#152345]/35" : "hover:bg-gray-50"
                             }`}
                           >
+                            {/* COLUNA 1: COR INDEPENDENTE & NOME */}
                             <td className="py-3 px-3">
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-2.5">
                                 <button
                                   type="button"
                                   onClick={() => setOpenColorPickerTarget({
                                     catId: cat.id,
                                     discId: disc.id,
                                     discName: disc.nome,
-                                    currentCor: disc.cor || "#3b82f6"
+                                    currentCor: currentCor
                                   })}
-                                  className="w-6 h-6 rounded-full border border-gray-300 dark:border-gray-600 shadow-sm transition-transform hover:scale-110 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
-                                  style={{ backgroundColor: disc.cor || "#3b82f6" }}
-                                  title="Clique para escolher a cor (48 opções de paleta)"
-                                />
+                                  className="w-7 h-7 rounded-full border-2 border-white dark:border-gray-700 shadow-md transition-transform hover:scale-115 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
+                                  style={{ backgroundColor: currentCor }}
+                                  title={`Alterar cor independente de "${disc.nome}"`}
+                                >
+                                  <Palette className="w-3.5 h-3.5 text-white drop-shadow-sm opacity-90" />
+                                </button>
 
                                 <input
                                   type="text"
@@ -469,144 +520,332 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
                                   onChange={(e) =>
                                     handleUpdateDisciplinaField(cat.id, disc.id, "nome", e.target.value)
                                   }
-                                  className={`font-semibold text-xs py-1 px-2 rounded bg-transparent border-none outline-none focus:bg-gray-100/10 focus:ring-1 focus:ring-blue-500 ${
+                                  className={`font-semibold text-xs py-1 px-2 rounded bg-transparent border-none outline-none focus:bg-gray-100/10 focus:ring-1 focus:ring-blue-500 w-full ${
                                     darkMode ? "text-white" : "text-gray-800"
                                   }`}
                                 />
                               </div>
                             </td>
 
-                          <td className="py-3 px-3 text-center">
-                            <input
-                              type="number"
-                              min="1"
-                              value={disc.questoes}
-                              onChange={(e) =>
-                                handleUpdateDisciplinaField(
-                                  cat.id,
-                                  disc.id,
-                                  "questoes",
-                                  Math.max(1, parseInt(e.target.value) || 0)
-                                )
-                              }
-                              className={`w-14 text-center py-1 rounded border text-xs outline-none font-bold ${
-                                darkMode
-                                  ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
-                                  : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
-                              }`}
-                            />
-                          </td>
+                            {/* COLUNA 2: QUESTÕES (INDEPENDENTE) */}
+                            <td className="py-3 px-3 text-center">
+                              <div className="inline-flex items-center space-x-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "questoes",
+                                      Math.max(1, currentQuestoes - 1)
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Diminuir questões"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={currentQuestoes}
+                                  onChange={(e) =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "questoes",
+                                      Math.max(1, parseInt(e.target.value) || 0)
+                                    )
+                                  }
+                                  className={`w-12 text-center py-1 rounded border text-xs outline-none font-bold ${
+                                    darkMode
+                                      ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                      : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                                  }`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "questoes",
+                                      currentQuestoes + 1
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Aumentar questões"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
 
-                          <td className="py-3 px-3 text-center">
-                            <input
-                              type="number"
-                              step="0.5"
-                              min="0.5"
-                              value={disc.peso}
-                              onChange={(e) =>
-                                handleUpdateDisciplinaField(
-                                  cat.id,
-                                  disc.id,
-                                  "peso",
-                                  Math.max(0.5, parseFloat(e.target.value) || 0)
-                                )
-                              }
-                              className={`w-14 text-center py-1 rounded border text-xs outline-none font-bold ${
-                                darkMode
-                                  ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
-                                  : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
-                              }`}
-                            />
-                          </td>
+                            {/* COLUNA 3: PESO (INDEPENDENTE) */}
+                            <td className="py-3 px-3 text-center">
+                              <div className="inline-flex items-center space-x-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "peso",
+                                      Math.max(0.5, parseFloat((currentPeso - 0.5).toFixed(1)))
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Diminuir peso"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0.1"
+                                  value={currentPeso}
+                                  onChange={(e) =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "peso",
+                                      Math.max(0.1, parseFloat(e.target.value) || 0)
+                                    )
+                                  }
+                                  className={`w-12 text-center py-1 rounded border text-xs outline-none font-bold ${
+                                    darkMode
+                                      ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                      : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                                  }`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "peso",
+                                      parseFloat((currentPeso + 0.5).toFixed(1))
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Aumentar peso"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
 
-                          <td className="py-3 px-3 text-center text-xs font-extrabold text-blue-500">
-                            {totalPerc}%
-                          </td>
+                            {/* COLUNA 4: CARGA HORÁRIA TOTAL (INDEPENDENTE) */}
+                            <td className="py-3 px-3 text-center">
+                              <div className="inline-flex items-center space-x-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "horasTotais",
+                                      Math.max(1, currentHorasTotais - 1)
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Diminuir carga horária"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="1"
+                                  value={currentHorasTotais}
+                                  onChange={(e) =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "horasTotais",
+                                      Math.max(1, parseFloat(e.target.value) || 0)
+                                    )
+                                  }
+                                  className={`w-14 text-center py-1 rounded border text-xs outline-none font-bold ${
+                                    darkMode
+                                      ? "bg-[#16223f] border-[#25365e] text-emerald-400 focus:border-emerald-500"
+                                      : "bg-white border-gray-200 text-emerald-700 focus:border-emerald-500"
+                                  }`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "horasTotais",
+                                      currentHorasTotais + 1
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Aumentar carga horária"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
 
-                          <td className="py-3 px-3 text-center">
-                            <button
-                              onClick={() => handleDeleteDisciplina(cat.id, disc.id)}
-                              className={`p-1.5 rounded-lg border transition-colors ${
-                                darkMode
-                                  ? "border-[#2d3f66] hover:bg-red-950/45 text-gray-400 hover:text-red-400"
-                                  : "border-gray-200 hover:bg-red-50 text-gray-400 hover:text-red-600"
-                              }`}
-                              title="Remover disciplina"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {/* COLUNA 5: HORAS POR CICLO (INDEPENDENTE) */}
+                            <td className="py-3 px-3 text-center">
+                              <div className="inline-flex items-center space-x-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "horasPorCiclo",
+                                      Math.max(0.5, parseFloat((currentHorasPorCiclo - 0.5).toFixed(1)))
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Diminuir horas por ciclo"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0.5"
+                                  max="8"
+                                  value={currentHorasPorCiclo}
+                                  onChange={(e) =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "horasPorCiclo",
+                                      Math.max(0.5, parseFloat(e.target.value) || 0)
+                                    )
+                                  }
+                                  className={`w-12 text-center py-1 rounded border text-xs outline-none font-bold ${
+                                    darkMode
+                                      ? "bg-[#16223f] border-[#25365e] text-purple-400 focus:border-purple-500"
+                                      : "bg-white border-gray-200 text-purple-700 focus:border-purple-500"
+                                  }`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateDisciplinaField(
+                                      cat.id,
+                                      disc.id,
+                                      "horasPorCiclo",
+                                      parseFloat((currentHorasPorCiclo + 0.5).toFixed(1))
+                                    )
+                                  }
+                                  className="w-6 h-6 rounded flex items-center justify-center bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-xs font-bold transition-colors cursor-pointer"
+                                  title="Aumentar horas por ciclo"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* COLUNA 6: TOTAL (%) */}
+                            <td className="py-3 px-3 text-center text-xs font-extrabold text-blue-500">
+                              {totalPerc}%
+                            </td>
+
+                            {/* COLUNA 7: EXCLUIR */}
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                onClick={() => handleDeleteDisciplina(cat.id, disc.id)}
+                                className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                  darkMode
+                                    ? "border-[#2d3f66] hover:bg-red-950/45 text-gray-400 hover:text-red-400"
+                                    : "border-gray-200 hover:bg-red-50 text-gray-400 hover:text-red-600"
+                                }`}
+                                title="Remover disciplina"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+
+                      {cat.disciplinas.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className={`text-center py-6 text-xs italic ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                            Nenhuma disciplina cadastrada nesta área de conhecimento.
                           </td>
                         </tr>
-                      );
-                    })}
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-                    {cat.disciplinas.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className={`text-center py-6 text-xs italic ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                          Nenhuma disciplina cadastrada nesta área de conhecimento.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                {/* BARRA CONTABILIZANDO TOTAL DE QUESTÕES, PONTUAÇÃO, CARGA HORÁRIA E % DA ÁREA */}
+                <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-3 ${
+                  darkMode ? "bg-[#111e3b]/80 border-[#1e2d4d]" : "bg-blue-50/60 border-blue-100"
+                }`}>
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs">
+                    <div className="flex items-center space-x-1.5">
+                      <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Total de Questões ({cat.nome}):
+                      </span>
+                      <span className={`font-black ${darkMode ? "text-white" : "text-gray-900"}`}>
+                        {totalQuestoesCat} questões
+                      </span>
+                    </div>
 
-              {/* BARRA CONTABILIZANDO TOTAL DE QUESTÕES, PONTUAÇÃO E % DA ÁREA */}
-              <div className={`p-3.5 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-3 ${
-                darkMode ? "bg-[#111e3b]/80 border-[#1e2d4d]" : "bg-blue-50/60 border-blue-100"
-              }`}>
-                <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs">
-                  <div className="flex items-center space-x-1.5">
-                    <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                      Total de Questões ({cat.nome}):
-                    </span>
-                    <span className={`font-black ${darkMode ? "text-white" : "text-gray-900"}`}>
-                      {totalQuestoesCat} questões
-                    </span>
+                    <div className="flex items-center space-x-1.5 border-l border-gray-300 dark:border-gray-700 pl-3 sm:pl-6">
+                      <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Pontuação Total:
+                      </span>
+                      <span className="font-extrabold text-amber-500">
+                        {pontosCat} pts
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5 border-l border-gray-300 dark:border-gray-700 pl-3 sm:pl-6">
+                      <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Carga Horária:
+                      </span>
+                      <span className="font-extrabold text-emerald-500">
+                        {cargaHorariaCat}h
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5 border-l border-gray-300 dark:border-gray-700 pl-3 sm:pl-6">
+                      <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Peso no Edital:
+                      </span>
+                      <span className="font-extrabold text-blue-500">
+                        {pctCat}%
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-1.5 border-l border-gray-300 dark:border-gray-700 pl-3 sm:pl-6">
-                    <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                      Pontuação Total:
-                    </span>
-                    <span className="font-extrabold text-amber-500">
-                      {pontosCat} pts
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-1.5 border-l border-gray-300 dark:border-gray-700 pl-3 sm:pl-6">
-                    <span className={`font-bold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                      Peso no Edital:
-                    </span>
-                    <span className="font-extrabold text-blue-500">
-                      {pctCat}%
-                    </span>
+                  <div className="w-full sm:w-44 bg-gray-200 dark:bg-gray-700/80 h-2 rounded-full overflow-hidden shrink-0">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, parseFloat(pctCat))}%` }}
+                    />
                   </div>
                 </div>
 
-                <div className="w-full sm:w-44 bg-gray-200 dark:bg-gray-700/80 h-2 rounded-full overflow-hidden shrink-0">
-                  <div
-                    className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, parseFloat(pctCat))}%` }}
-                  />
-                </div>
+                {/* Botão: Nova Disciplina */}
+                <button
+                  onClick={() => handleAddDisciplina(cat.id)}
+                  className={`w-full py-2 border border-dashed rounded-xl flex items-center justify-center space-x-1 text-xs font-bold transition-colors cursor-pointer ${
+                    darkMode
+                      ? "border-[#25365e] text-gray-400 hover:text-white hover:bg-[#16223f]/40"
+                      : "border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Nova Disciplina</span>
+                </button>
               </div>
-
-              {/* Botão: Nova Disciplina */}
-              <button
-                onClick={() => handleAddDisciplina(cat.id)}
-                className={`w-full py-2 border border-dashed rounded-xl flex items-center justify-center space-x-1 text-xs font-bold transition-colors cursor-pointer ${
-                  darkMode
-                    ? "border-[#25365e] text-gray-400 hover:text-white hover:bg-[#16223f]/40"
-                    : "border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50"
-                }`}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Nova Disciplina</span>
-              </button>
-            </div>
-          );
-        })}
+            );
+          })}
 
           {/* ÁREA DE EXCLUSÃO (TRASH BIN) / AÇÕES INFERIORES */}
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center pt-4">
@@ -819,45 +1058,73 @@ export default function EditalView({ state, updateState, darkMode }: EditalViewP
               </button>
             </div>
 
-            <div className="flex items-center space-x-2 text-xs">
-              <span className={`font-semibold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Cor Atual:</span>
-              <span
-                className="w-5 h-5 rounded-full border border-gray-400 shadow-sm shrink-0"
-                style={{ backgroundColor: openColorPickerTarget.currentCor }}
-              />
-              <span className="font-mono text-[11px] font-bold text-blue-400">{openColorPickerTarget.currentCor}</span>
+            <div className="flex items-center justify-between space-x-2 text-xs p-2 rounded-xl bg-gray-500/10 border border-gray-100/10">
+              <div className="flex items-center space-x-2">
+                <span className={`font-semibold ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Cor Selecionada:</span>
+                <span
+                  className="w-5 h-5 rounded-full border border-gray-400 shadow-sm shrink-0"
+                  style={{ backgroundColor: openColorPickerTarget.currentCor }}
+                />
+                <span className="font-mono text-[11px] font-bold text-blue-400">{openColorPickerTarget.currentCor}</span>
+              </div>
+
+              {/* Seletor de cor customizada */}
+              <label className="flex items-center space-x-1.5 px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg text-[11px] font-bold cursor-pointer border border-blue-500/30 transition-colors">
+                <span>Personalizada</span>
+                <input
+                  type="color"
+                  value={openColorPickerTarget.currentCor}
+                  onChange={(e) => {
+                    const newHex = e.target.value;
+                    handleUpdateDisciplinaField(openColorPickerTarget.catId, openColorPickerTarget.discId, "cor", newHex);
+                    setOpenColorPickerTarget({
+                      ...openColorPickerTarget,
+                      currentCor: newHex
+                    });
+                  }}
+                  className="w-4 h-4 opacity-0 absolute cursor-pointer"
+                />
+              </label>
             </div>
 
             {/* Grid de 48 Cores */}
-            <div className="grid grid-cols-8 gap-2 p-2 bg-black/10 dark:bg-black/30 rounded-2xl border border-gray-100/10">
-              {PALETA_48_CORES.map((corHex) => {
-                const isSelected = openColorPickerTarget.currentCor.toLowerCase() === corHex.toLowerCase();
-                return (
-                  <button
-                    key={corHex}
-                    type="button"
-                    onClick={() => {
-                      handleUpdateDisciplinaField(openColorPickerTarget.catId, openColorPickerTarget.discId, "cor", corHex);
-                      setOpenColorPickerTarget(null);
-                    }}
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full transition-all cursor-pointer flex items-center justify-center hover:scale-125 shadow-md border ${
-                      isSelected ? "ring-2 ring-blue-500 ring-offset-2 scale-110 border-white z-10" : "border-black/20"
-                    }`}
-                    style={{ backgroundColor: corHex }}
-                    title={corHex}
-                  >
-                    {isSelected && <Check className="w-4 h-4 text-white drop-shadow-md stroke-[3]" />}
-                  </button>
-                );
-              })}
+            <div className="space-y-1.5">
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Selecione uma cor da paleta:
+              </span>
+              <div className="grid grid-cols-8 gap-2 p-2.5 bg-black/10 dark:bg-black/30 rounded-2xl border border-gray-100/10">
+                {PALETA_48_CORES.map((corHex, pIdx) => {
+                  const isSelected = openColorPickerTarget.currentCor.toLowerCase() === corHex.toLowerCase();
+                  return (
+                    <button
+                      key={`color_choice_${corHex}_${pIdx}`}
+                      type="button"
+                      onClick={() => {
+                        handleUpdateDisciplinaField(openColorPickerTarget.catId, openColorPickerTarget.discId, "cor", corHex);
+                        setOpenColorPickerTarget(null);
+                      }}
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full transition-all cursor-pointer flex items-center justify-center hover:scale-125 shadow-md border ${
+                        isSelected ? "ring-2 ring-blue-500 ring-offset-2 scale-110 border-white z-10" : "border-black/20"
+                      }`}
+                      style={{ backgroundColor: corHex }}
+                      title={corHex}
+                    >
+                      {isSelected && <Check className="w-4 h-4 text-white drop-shadow-md stroke-[3]" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-between items-center pt-1 border-t border-gray-100/10">
+              <span className="text-[10px] text-gray-400 italic">
+                A cor é aplicada exclusivamente a esta matéria.
+              </span>
               <button
                 onClick={() => setOpenColorPickerTarget(null)}
-                className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
-                Fechar
+                Concluir
               </button>
             </div>
           </div>

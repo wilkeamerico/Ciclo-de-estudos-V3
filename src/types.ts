@@ -290,3 +290,120 @@ export interface CicloEstudo {
   state: StudyState;
 }
 
+// ----------------------------------------------------
+// Tipos e Interfaces do Conferir-provas (SIMULADO IA)
+// ----------------------------------------------------
+
+export interface ExamFile {
+  name: string;
+  size: number;
+  type: string;
+  mimeType: string;
+  data?: string; // base64 payload
+  text?: string; // extracted or raw text
+}
+
+export type QuestionStatus = 'CORRECT' | 'WRONG' | 'BLANK' | 'ANNULLED';
+export type QuestionDifficulty = 'FÁCIL' | 'MÉDIA' | 'DIFÍCIL';
+export type PriorityLevel = 'ALTA' | 'MÉDIA' | 'CRÍTICA';
+export type StudyStatus = 'A_REVISAR' | 'EM_ANDAMENTO' | 'DOMINADO';
+
+export interface QuestionAnalysis {
+  questionNumber: number;
+  discipline: string;
+  topic: string;
+  difficulty: QuestionDifficulty;
+  candidateAnswer: string | null;
+  officialAnswer: string;
+  status: QuestionStatus;
+  explanation: string;
+  editalReference?: string;
+  canAppeal?: boolean;
+  appealReason?: string;
+}
+
+export interface DisciplineAnalysis {
+  discipline: string;
+  weight: number;
+  totalQuestions: number;
+  correctCount: number;
+  wrongCount: number;
+  blankCount?: number;
+  accuracyPercentage: number;
+  diagnosis: string;
+  recommendedAction: string;
+}
+
+export interface CriticalWeakness {
+  topic: string;
+  discipline: string;
+  missedCount: number;
+  priority: PriorityLevel;
+  actionGuide: string;
+  status?: StudyStatus;
+}
+
+export interface WeeklyCycle {
+  week: number;
+  title: string;
+  primaryFocus: string;
+  disciplinesToReview: string[];
+  actionSteps: string[];
+  milestoneGoal?: string;
+}
+
+export interface StudyPlan {
+  overallStrategy: string;
+  recommendedDailyHours?: number;
+  weeklyCycles: WeeklyCycle[];
+  smartTips: string[];
+}
+
+export interface ExamSummary {
+  totalQuestions: number;
+  totalCorrect: number;
+  totalWrong: number;
+  totalBlank: number;
+  totalAnnulled: number;
+  scorePercentage: number;
+  weightedScore?: number;
+  estimatedCutoffScore?: number;
+  performanceTier: string;
+  generalDiagnosis: string;
+}
+
+export interface ExamResult {
+  id: string;
+  date?: string;
+  createdAt?: string;
+  examTitle: string;
+  summary: ExamSummary;
+  disciplines: DisciplineAnalysis[];
+  questions: QuestionAnalysis[];
+  criticalWeaknesses: CriticalWeakness[];
+  studyPlan: StudyPlan;
+}
+
+export interface Flashcard {
+  front: string;
+  back: string;
+}
+
+export interface PracticeQuestion {
+  statement: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+}
+
+export interface TopicStudyMaterial {
+  topic: string;
+  discipline: string;
+  flashSummary: string;
+  mnemonics?: string[];
+  commonTraps?: string[];
+  flashcards: Flashcard[];
+  practiceQuestions: PracticeQuestion[];
+}
+
+
