@@ -5,7 +5,8 @@ import {
   Play, Pause, RotateCcw, Plus, Trash2, Calendar, FileText, 
   CheckCircle2, ChevronUp, ChevronDown, Upload, AlertCircle, 
   Edit, Filter, GripVertical, BookOpen, CheckCircle, RefreshCw,
-  Volume2, VolumeX, Bell, Award, Sparkles, X, Clock, Pencil
+  Volume2, VolumeX, Bell, Award, Sparkles, X, Clock, Pencil,
+  SlidersHorizontal, LayoutList, Check, Layers, ChevronRight
 } from "lucide-react";
 
 interface StudyViewProps {
@@ -461,6 +462,20 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
   const [filterText, setFilterText] = useState("");
   const [filterIncidencia, setFilterIncidencia] = useState<"TODAS" | "ALTA" | "MÉDIA" | "BAIXA">("TODAS");
   const [filterStatus, setFilterStatus] = useState<"TODOS" | "NÃO ESTUDADO" | "ESTUDADO" | "REVISADO">("TODOS");
+
+  // --- COMPACT / ENXUTO MODE FOR CONTROLE DE CONTEÚDO PROGRAMÁTICO ---
+  const [modoEnxuto, setModoEnxuto] = useState<boolean>(() => {
+    const saved = localStorage.getItem("study_conteudo_enxuto");
+    return saved !== null ? saved === "true" : true;
+  });
+
+  const toggleModoEnxuto = () => {
+    setModoEnxuto(prev => {
+      const next = !prev;
+      localStorage.setItem("study_conteudo_enxuto", String(next));
+      return next;
+    });
+  };
 
   // --- RECTIFY / MANAGE TOPIC LOGS AND CREATION ---
   const handleAddTopic = () => {
@@ -1029,33 +1044,33 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
   }, [activeDisciplina, filterText, filterIncidencia, filterStatus]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in font-sans">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in font-sans">
       
-      {/* SEÇÃO DA SEQUÊNCIA DOS BLOCOS DO CICLO (COL-SPAN-5) */}
-      <div className="lg:col-span-5">
+      {/* PAINEL DO TEMPORIZADOR & SEQUÊNCIA DOS BLOCOS DO CICLO (50% / COL-SPAN-6) */}
+      <div className="min-w-0 flex flex-col">
         
         {/* Unified study loop control card */}
-        <div className={`p-5 rounded-2xl border transition-all flex flex-col ${
+        <div className={`p-4 sm:p-6 rounded-2xl border transition-all flex flex-col flex-1 min-w-0 ${
           darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
         }`}>
           
           {/* Section 1: Ciclo de Estudos em Curso (Compact indicator & Overall Progress Bar) */}
           <div className="pb-4 mb-4 border-b border-gray-100/10">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3 min-w-0">
                 <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-600/10 text-blue-500 font-extrabold text-xl shrink-0">
                   {currentCycle}
                 </div>
-                <div>
-                  <h4 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                <div className="min-w-0">
+                  <h4 className={`text-xs font-bold uppercase tracking-wider truncate ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
                     Ciclo em Curso
                   </h4>
-                  <p className={`text-[11px] ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  <p className={`text-[11px] truncate ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                     Seus blocos estão no ciclo nº <strong>{currentCycle}</strong>.
                   </p>
                 </div>
               </div>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 ${
                 darkMode ? "bg-blue-900/30 text-blue-300" : "bg-blue-50 text-blue-700"
               }`}>
                 Ativo
@@ -1077,18 +1092,18 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
               />
 
               {/* Top Row: Title & Formatted Time */}
-              <div className="relative z-10 flex justify-between items-start">
-                <div>
+              <div className="relative z-10 flex justify-between items-start gap-2">
+                <div className="min-w-0 flex-1">
                   <span className="text-[8px] font-bold text-blue-500 uppercase tracking-widest block">
                     PROGRESSO GERAL DO CICLO
                   </span>
-                  <h4 className={`text-xs font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                  <h4 className={`text-xs font-bold truncate ${darkMode ? "text-white" : "text-gray-900"}`}>
                     Andamento do Ciclo {currentCycle}
                   </h4>
                 </div>
 
-                <div className="text-right flex flex-col items-end">
-                  <span className={`text-[11px] font-mono font-extrabold ${
+                <div className="text-right flex flex-col items-end shrink-0">
+                  <span className={`text-[11px] font-mono font-extrabold whitespace-nowrap ${
                     cycleProgress.isCompleted ? "text-emerald-500" : darkMode ? "text-blue-300" : "text-blue-600"
                   }`}>
                     {cycleProgress.isCompleted ? "CONCLUÍDO" : cycleProgress.formattedRemaining}
@@ -1104,53 +1119,53 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                 <div 
                   className="h-full transition-all duration-1000 ease-out rounded-full"
                   style={{ 
-                    width: `${cycleProgress.totalPct}%`,
+                    width: `${cycleProgress.totalPct}%`, 
                     backgroundColor: cycleProgress.isCompleted ? "#10b981" : "#3b82f6"
-                  }}
+                  }} 
                 />
               </div>
 
               {/* Bottom Row Metrics */}
-              <div className="relative z-10 flex justify-between items-center mt-2.5 pt-1.5 border-t border-gray-100/10 text-[9px]">
-                <span className={`font-semibold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+              <div className="relative z-10 flex justify-between items-center mt-2.5 pt-1.5 border-t border-gray-100/10 text-[9px] gap-2">
+                <span className={`font-semibold uppercase tracking-wider truncate ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                   Concluído: <span className={darkMode ? "text-white" : "text-gray-800"}>{cycleProgress.elapsedHours}h</span> ({cycleProgress.totalPct.toFixed(1)}%)
                 </span>
-                <span className={`font-semibold uppercase tracking-wider ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  {orderedDisciplinas.length} {orderedDisciplinas.length === 1 ? "bloco" : "blocos"} no ciclo
+                <span className={`font-semibold uppercase tracking-wider shrink-0 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                  {orderedDisciplinas.length} {orderedDisciplinas.length === 1 ? "bloco" : "blocos"}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Section 2: Temporizador Geral (General Timer) */}
+          {/* Section 2: Temporizador Geral (Proportionally Scalable Display) */}
           {activeDisciplina && (
-            <div className="flex flex-col items-center justify-center pb-5 mb-5 border-b border-gray-100/10 relative overflow-hidden">
-              <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 text-center ${
+            <div className="flex flex-col items-center justify-center pb-5 mb-5 border-b border-gray-100/10 relative overflow-hidden w-full">
+              <h4 className={`text-xs sm:text-sm font-bold uppercase tracking-wider mb-2 text-center truncate max-w-full px-2 ${
                 darkMode ? "text-gray-300" : "text-gray-600"
               }`}>
                 Temporizador Geral: <strong className="text-blue-500">{activeDisciplina.nome}</strong>
               </h4>
 
-              {/* Visual Timer Display (Responsive & Prominent) */}
-              <div className="relative w-52 h-52 sm:w-60 sm:h-60 md:w-64 md:h-64 flex flex-col items-center justify-center my-1 select-none">
-                <svg viewBox="0 0 200 200" className="w-full h-full absolute transform -rotate-90">
-                  <circle cx="100" cy="100" r="85" fill="transparent" stroke={darkMode ? "#1e2d4d" : "#e2e8f0"} strokeWidth="7" />
+              {/* Visual Timer Display (Fluidly Scalable & Proportion-Preserving) */}
+              <div className="relative w-full max-w-[260px] sm:max-w-[300px] md:max-w-[340px] aspect-square flex flex-col items-center justify-center my-2 select-none mx-auto">
+                <svg viewBox="0 0 240 240" className="w-full h-full absolute inset-0 transform -rotate-90">
+                  <circle cx="120" cy="120" r="102" fill="transparent" stroke={darkMode ? "#1e2d4d" : "#e2e8f0"} strokeWidth="8" />
                   <circle
-                    cx="100"
-                    cy="100"
-                    r="85"
+                    cx="120"
+                    cy="120"
+                    r="102"
                     fill="transparent"
                     stroke={activeDisciplina?.cor || "#3b82f6"}
-                    strokeWidth="7"
-                    strokeDasharray={2 * Math.PI * 85}
-                    strokeDashoffset={2 * Math.PI * 85 * (1 - getBlockTimerState(activeDisciplina.id).pct / 100)}
+                    strokeWidth="8"
+                    strokeDasharray={2 * Math.PI * 102}
+                    strokeDashoffset={2 * Math.PI * 102 * (1 - getBlockTimerState(activeDisciplina.id).pct / 100)}
                     strokeLinecap="round"
                     className="transition-all duration-1000"
                   />
                 </svg>
 
                 {isEditingTimer ? (
-                  <div className="z-10 flex flex-col items-center space-y-2 bg-[#101b35] p-3 rounded-2xl border border-blue-600/30 shadow-xl max-w-[210px]">
+                  <div className="z-10 flex flex-col items-center space-y-2 bg-[#101b35] p-3 rounded-2xl border border-blue-600/30 shadow-2xl max-w-[220px]">
                     <span className="text-[10px] font-extrabold uppercase text-blue-400 tracking-wider">Ajustar Tempo (H:M:S)</span>
                     <div className="flex items-center space-x-1.5">
                       <div className="flex flex-col items-center">
@@ -1161,7 +1176,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                           max="23"
                           value={timerInputHours}
                           onChange={(e) => setTimerInputHours(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-11 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
+                          className="w-12 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
                         />
                       </div>
                       <span className="text-white text-xs font-bold pt-3">:</span>
@@ -1173,7 +1188,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                           max="59"
                           value={timerInputMinutes}
                           onChange={(e) => setTimerInputMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                          className="w-11 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
+                          className="w-12 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
                         />
                       </div>
                       <span className="text-white text-xs font-bold pt-3">:</span>
@@ -1185,20 +1200,20 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                           max="59"
                           value={timerInputSeconds}
                           onChange={(e) => setTimerInputSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
-                          className="w-11 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
+                          className="w-12 text-center py-1 bg-[#0b1329] border border-gray-700 text-white rounded-lg font-mono font-bold text-xs focus:border-blue-500 outline-none"
                         />
                       </div>
                     </div>
                     <div className="flex items-center space-x-2 pt-1 w-full">
                       <button
                         onClick={handleSaveCustomTimer}
-                        className="flex-1 py-1 bg-blue-600 text-white text-[11px] font-extrabold rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-sm"
+                        className="flex-1 py-1.5 bg-blue-600 text-white text-[11px] font-extrabold rounded-lg hover:bg-blue-700 transition-colors cursor-pointer shadow-sm"
                       >
                         Definir
                       </button>
                       <button
                         onClick={() => setIsEditingTimer(false)}
-                        className="py-1 px-2 bg-gray-700 text-gray-200 text-[11px] font-bold rounded-lg hover:bg-gray-600 transition-colors cursor-pointer"
+                        className="py-1.5 px-2 bg-gray-700 text-gray-200 text-[11px] font-bold rounded-lg hover:bg-gray-600 transition-colors cursor-pointer"
                       >
                         X
                       </button>
@@ -1206,39 +1221,39 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                   </div>
                 ) : (
                   <div className="z-10 text-center cursor-pointer p-2 rounded-2xl hover:bg-blue-500/5 transition-all" onClick={() => setIsEditingTimer(true)} title="Clique para ajustar o cronômetro">
-                    <span className={`text-3xl sm:text-4xl md:text-5xl font-mono font-black tracking-tight ${
+                    <span className={`text-3xl sm:text-4xl md:text-5xl lg:text-5xl font-mono font-black tracking-tight leading-none ${
                       darkMode ? "text-white" : "text-gray-900"
                     }`}>
                       {getBlockTimerState(activeDisciplina.id).formatted}
                     </span>
-                    <p className={`text-[10px] sm:text-xs uppercase font-extrabold mt-1 tracking-wider ${
+                    <p className={`text-[11px] sm:text-xs uppercase font-extrabold mt-2 tracking-wider ${
                       isTimerRunning ? "text-emerald-500 animate-pulse" : "text-gray-400"
                     }`}>
                       {isTimerRunning ? "ESTUDANDO..." : "PAUSADO"}
                     </p>
-                    <p className="text-[9px] sm:text-xs text-blue-400 font-bold mt-1 hover:underline">Ajustar Tempo (H:M:S)</p>
+                    <p className="text-[10px] sm:text-xs text-blue-400 font-bold mt-1 hover:underline">Ajustar Tempo (H:M:S)</p>
                   </div>
                 )}
               </div>
 
               {/* Single Core Study Controller Buttons */}
-              <div className="flex items-center space-x-3 mt-3 w-full max-w-xs px-2">
+              <div className="flex items-center justify-center space-x-2.5 mt-3 w-full max-w-xs px-2">
                 <button
                   onClick={toggleTimer}
-                  className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
                     isTimerRunning
-                      ? "bg-amber-500 hover:bg-amber-600 text-white"
-                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/15"
+                      ? "bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-500/20"
+                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
                   }`}
                 >
                   {isTimerRunning ? (
                     <>
-                      <Pause className="w-3.5 h-3.5 fill-current" />
+                      <Pause className="w-4 h-4 fill-current" />
                       <span>Pausar</span>
                     </>
                   ) : (
                     <>
-                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <Play className="w-4 h-4 fill-current" />
                       <span>Iniciar</span>
                     </>
                   )}
@@ -1246,7 +1261,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
                 <button
                   onClick={resetTimer}
-                  className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                  className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
                     darkMode
                       ? "bg-[#16223f] border-[#25365e] text-gray-300 hover:bg-[#1d2d52]"
                       : "bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200"
@@ -1264,7 +1279,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                       playNotificationSound('block');
                     }
                   }}
-                  className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                  className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
                     soundEnabled
                       ? darkMode
                         ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/60"
@@ -1284,15 +1299,15 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                 onClick={handleOpenRegisterModal}
                 className="w-full max-w-xs mt-3 py-2.5 px-3 rounded-xl font-extrabold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-md shadow-emerald-600/20"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Registrar Tempo Estudado & Questões</span>
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span className="truncate">Registrar Tempo Estudado & Questões</span>
               </button>
             </div>
           )}
 
-          {/* Section 3: Sequência de Blocos do Ciclo */}
-          <div className="flex flex-col flex-grow">
-            <div className="flex justify-between items-center mb-3">
+          {/* Section 3: Sequência de Blocos do Ciclo (Anti-Squish Flexible Layout) */}
+          <div className="flex flex-col flex-grow min-w-0">
+            <div className="flex justify-between items-center mb-2.5">
               <div>
                 <h3 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? "text-white" : "text-gray-800"}`}>
                   Sequência de Blocos do Ciclo
@@ -1303,8 +1318,8 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
               </div>
             </div>
 
-            {/* Scrollable container for the blocks to reduce scrolling height */}
-            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+            {/* Scrollable container for the blocks with generous responsive room */}
+            <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
               {orderedDisciplinas.map((d, index) => {
                 const isActive = d.id === selectedDiscId;
                 const { pct, formatted, remaining } = getBlockTimerState(d.id);
@@ -1319,7 +1334,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, index)}
                     onClick={() => setSelectedDiscId(d.id)}
-                    className={`relative overflow-hidden p-3 rounded-xl border transition-all cursor-pointer group ${
+                    className={`relative overflow-hidden p-3 rounded-xl border transition-all cursor-pointer group min-w-0 ${
                       isActive
                         ? darkMode
                           ? "border-blue-500 bg-[#162547] shadow-lg shadow-blue-500/5"
@@ -1346,23 +1361,23 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                     />
 
                     {/* Top Row: Block Title & Estimated Time / Timer */}
-                    <div className="relative z-10 flex justify-between items-start">
-                      <div className="flex items-center space-x-1.5">
-                        <GripVertical className="w-3 h-3 text-gray-500 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div>
+                    <div className="relative z-10 flex justify-between items-start gap-2 min-w-0">
+                      <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                        <GripVertical className="w-3.5 h-3.5 text-gray-500 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        <div className="min-w-0 flex-1">
                           <span className="text-[8px] font-bold text-blue-500 uppercase tracking-widest block">
                             BLOCO {index + 1}
                           </span>
-                          <h4 className={`text-xs font-bold truncate max-w-[150px] sm:max-w-[170px] ${
+                          <h4 className={`text-xs sm:text-sm font-bold truncate ${
                             darkMode ? "text-white" : "text-gray-900"
-                          }`}>
+                          }`} title={d.nome}>
                             {d.nome}
                           </h4>
                         </div>
                       </div>
 
-                      <div className="text-right flex flex-col items-end">
-                        <span className={`text-[11px] font-mono font-extrabold ${
+                      <div className="text-right flex flex-col items-end shrink-0 pl-1">
+                        <span className={`text-[11px] sm:text-xs font-mono font-extrabold whitespace-nowrap ${
                           isCompleted ? "text-emerald-500" : darkMode ? "text-blue-300" : "text-blue-600"
                         }`}>
                           {isCompleted ? "CONCLUÍDO" : formatted}
@@ -1374,19 +1389,19 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                     </div>
 
                     {/* Progress Bar Line */}
-                    <div className="relative z-10 w-full bg-gray-200/50 dark:bg-gray-800/60 h-1.5 rounded-full overflow-hidden mt-2.5">
+                    <div className="relative z-10 w-full bg-gray-200/50 dark:bg-gray-800/60 h-1.5 rounded-full overflow-hidden mt-2">
                       <div 
                         className="h-full transition-all duration-1000 ease-out rounded-full"
                         style={{ 
-                          width: `${pct}%`,
+                          width: `${pct}%`, 
                           backgroundColor: isCompleted ? "#10b981" : (d.cor || "#3b82f6")
-                        }}
+                        }} 
                       />
                     </div>
 
                     {/* Bottom Row: Questions Metrics and Ordering arrows */}
-                    <div className="relative z-10 flex justify-between items-center mt-2.5 pt-1.5 border-t border-gray-100/10">
-                      <div className={`text-[9px] font-semibold uppercase tracking-wider ${
+                    <div className="relative z-10 flex justify-between items-center mt-2 pt-1.5 border-t border-gray-100/10 text-[9px] sm:text-[10px] gap-2">
+                      <div className={`font-semibold uppercase tracking-wider truncate min-w-0 ${
                         darkMode ? "text-gray-400" : "text-gray-500"
                       }`}>
                         Questões: <span className={darkMode ? "text-white" : "text-gray-800"}>{qStats.total}</span> feitas 
@@ -1398,7 +1413,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                       </div>
 
                       {/* Reordering Controls */}
-                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex space-x-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                         <button
                           disabled={index === 0}
                           type="button"
@@ -1408,7 +1423,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                           }`}
                           title="Mover para Cima"
                         >
-                          <ChevronUp className="w-3 h-3" />
+                          <ChevronUp className="w-3.5 h-3.5" />
                         </button>
                         <button
                           disabled={index === orderedDisciplinas.length - 1}
@@ -1419,7 +1434,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                           }`}
                           title="Mover para Baixo"
                         >
-                          <ChevronDown className="w-3 h-3" />
+                          <ChevronDown className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
@@ -1440,43 +1455,61 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
       </div>
 
-      {/* CONTROLE DO CONTEÚDO PROGRAMÁTICO & ASSUNTOS (COL-SPAN-7) */}
-      <div className="lg:col-span-7 space-y-6">
+      {/* CONTROLE DO CONTEÚDO PROGRAMÁTICO & ASSUNTOS (50% / COL-SPAN-6) */}
+      <div className="min-w-0 flex flex-col space-y-6">
         
-        <div className={`p-6 rounded-2xl border transition-colors ${
+        <div className={`p-4 sm:p-6 rounded-2xl border transition-colors flex-1 ${
           darkMode ? "bg-[#0f1b35] border-[#1e2d4d] text-white" : "bg-white border-gray-200 shadow-sm text-gray-800"
         }`}>
           
-          <div className="border-b border-gray-100/10 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-blue-500" />
-                Controle de Conteúdo Programático
+          <div className="border-b border-gray-100/10 pb-4 mb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold flex items-center gap-2 truncate">
+                <BookOpen className="w-5 h-5 text-blue-500 shrink-0" />
+                <span className="truncate">Controle de Conteúdo Programático</span>
               </h3>
-              <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} mt-0.5`}>
-                Tópicos programáticos do bloco ativo: <strong className="text-blue-500">{activeDisciplina?.nome || "Selecione uma matéria"}</strong>
+              <p className={`text-xs ${darkMode ? "text-gray-400" : "text-gray-500"} mt-0.5 truncate`}>
+                Tópicos do bloco ativo: <strong className="text-blue-500">{activeDisciplina?.nome || "Selecione uma matéria"}</strong>
               </p>
             </div>
 
-            {/* AI Analyzer toggle option */}
-            {activeDisciplina && (
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {/* Toggle Modo Enxuto */}
               <button
-                onClick={() => setShowAIAnalyzer(!showAIAnalyzer)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all border ${
-                  showAIAnalyzer
-                    ? "bg-red-500/10 border-red-500/30 text-red-400"
-                    : "bg-blue-600 border-transparent hover:bg-blue-700 text-white shadow-sm"
+                onClick={toggleModoEnxuto}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all border cursor-pointer ${
+                  modoEnxuto
+                    ? "bg-blue-600/15 border-blue-500/40 text-blue-400 hover:bg-blue-600/25"
+                    : darkMode
+                    ? "bg-[#16223f] border-[#25365e] text-gray-300 hover:bg-[#1d2d52]"
+                    : "bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200"
                 }`}
+                title={modoEnxuto ? "Alternar para Modo Expandido" : "Alternar para Modo Enxuto"}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${analyzerStatus ? "animate-spin" : ""}`} />
-                <span>{showAIAnalyzer ? "Cancelar IA" : "Organizar por Importância (IA)"}</span>
+                <SlidersHorizontal className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+                <span>{modoEnxuto ? "Modo Enxuto" : "Modo Detalhado"}</span>
               </button>
-            )}
+
+              {/* AI Analyzer toggle option */}
+              {activeDisciplina && (
+                <button
+                  onClick={() => setShowAIAnalyzer(!showAIAnalyzer)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-all border cursor-pointer ${
+                    showAIAnalyzer
+                      ? "bg-red-500/10 border-red-500/30 text-red-400"
+                      : "bg-blue-600 border-transparent hover:bg-blue-700 text-white shadow-sm"
+                  }`}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${analyzerStatus ? "animate-spin" : ""}`} />
+                  <span>{showAIAnalyzer ? "Cancelar IA" : "Organizar por IA"}</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* COLLAPSIBLE AREA: AI EXAM BOOKLET SCANNER */}
           {showAIAnalyzer && activeDisciplina && (
-            <div className={`p-4 rounded-xl border mb-6 transition-all animate-fade-in ${
+            <div className={`p-4 rounded-xl border mb-5 transition-all animate-fade-in ${
               darkMode ? "bg-[#111e3c]/50 border-blue-900/40" : "bg-blue-50/40 border-blue-100"
             }`}>
               <div className="flex justify-between items-start mb-3">
@@ -1571,61 +1604,110 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
           {/* INSERÇÃO MANUAL DE NOVO TÓPICO COM INCIDÊNCIA */}
           {activeDisciplina && (
-            <div className="p-4 rounded-xl border mb-6 grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50/30 border-gray-200/50 dark:bg-transparent dark:border-[#1e2d4d]">
-              <div className="md:col-span-6">
-                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  Cadastrar Assunto Manualmente
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nome do assunto / tópico programático"
-                  value={newTopicName}
-                  onChange={(e) => setNewTopicName(e.target.value)}
-                  className={`w-full px-3 py-2 rounded-xl border outline-none text-xs transition-colors ${
-                    darkMode
-                      ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
-                      : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
-                  }`}
-                />
-              </div>
+            <div className={`rounded-xl border mb-5 transition-all ${
+              modoEnxuto
+                ? "p-3 bg-gray-50/30 border-gray-200/50 dark:bg-[#111e3b]/30 dark:border-[#1e2d4d]"
+                : "p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-gray-50/30 border-gray-200/50 dark:bg-transparent dark:border-[#1e2d4d]"
+            }`}>
+              {modoEnxuto ? (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Cadastrar novo assunto programático..."
+                    value={newTopicName}
+                    onChange={(e) => setNewTopicName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddTopic();
+                    }}
+                    className={`flex-1 px-3 py-1.5 rounded-lg border outline-none text-xs transition-colors ${
+                      darkMode
+                        ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                        : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                    }`}
+                  />
+                  <select
+                    value={newTopicIncidencia}
+                    onChange={(e) => setNewTopicIncidencia(e.target.value as any)}
+                    className={`px-2 py-1.5 rounded-lg border outline-none text-xs font-bold transition-colors cursor-pointer shrink-0 ${
+                      darkMode
+                        ? "bg-[#16223f] border-[#25365e] text-white"
+                        : "bg-white border-gray-200 text-gray-800"
+                    }`}
+                  >
+                    <option value="ALTA">Alta Incidência</option>
+                    <option value="MÉDIA">Média Incidência</option>
+                    <option value="BAIXA">Baixa Incidência</option>
+                  </select>
+                  <button
+                    onClick={handleAddTopic}
+                    className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg flex items-center justify-center space-x-1 transition-all cursor-pointer shadow-sm shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Adicionar</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="md:col-span-6">
+                    <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      Cadastrar Assunto Manualmente
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Nome do assunto / tópico programático"
+                      value={newTopicName}
+                      onChange={(e) => setNewTopicName(e.target.value)}
+                      className={`w-full px-3 py-2 rounded-xl border outline-none text-xs transition-colors ${
+                        darkMode
+                          ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                          : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                      }`}
+                    />
+                  </div>
 
-              <div className="md:col-span-3">
-                <label className={`block text-[10px] font-bold uppercase tracking-wider mb-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  Nível de Incidência
-                </label>
-                <select
-                  value={newTopicIncidencia}
-                  onChange={(e) => setNewTopicIncidencia(e.target.value as any)}
-                  className={`w-full px-3 py-2 rounded-xl border outline-none text-xs font-bold transition-colors cursor-pointer ${
-                    darkMode
-                      ? "bg-[#16223f] border-[#25365e] text-white"
-                      : "bg-white border-gray-200 text-gray-800"
-                  }`}
-                >
-                  <option value="ALTA">Alta Incidência</option>
-                  <option value="MÉDIA">Média Incidência</option>
-                  <option value="BAIXA">Baixa Incidência</option>
-                </select>
-              </div>
+                  <div className="md:col-span-3">
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider mb-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                      Nível de Incidência
+                    </label>
+                    <select
+                      value={newTopicIncidencia}
+                      onChange={(e) => setNewTopicIncidencia(e.target.value as any)}
+                      className={`w-full px-3 py-2 rounded-xl border outline-none text-xs font-bold transition-colors cursor-pointer ${
+                        darkMode
+                          ? "bg-[#16223f] border-[#25365e] text-white"
+                          : "bg-white border-gray-200 text-gray-800"
+                      }`}
+                    >
+                      <option value="ALTA">Alta Incidência</option>
+                      <option value="MÉDIA">Média Incidência</option>
+                      <option value="BAIXA">Baixa Incidência</option>
+                    </select>
+                  </div>
 
-              <div className="md:col-span-3">
-                <button
-                  onClick={handleAddTopic}
-                  className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Cadastrar</span>
-                </button>
-              </div>
+                  <div className="md:col-span-3">
+                    <button
+                      onClick={handleAddTopic}
+                      className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Cadastrar</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          {/* DISCRETE ADVANCED FILTERS BAR */}
+          {/* ADVANCED FILTERS BAR */}
           {activeDisciplina && (
-            <div className="mb-5 p-4 rounded-xl border flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-gray-50/20 dark:bg-[#16223f]/30 border-gray-200/50 dark:border-[#1e2d4d]">
+            <div className={`mb-4 rounded-xl border flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 ${
+              modoEnxuto
+                ? "p-2.5 bg-gray-50/20 dark:bg-[#16223f]/20 border-gray-200/50 dark:border-[#1e2d4d]"
+                : "p-4 bg-gray-50/20 dark:bg-[#16223f]/30 border-gray-200/50 dark:border-[#1e2d4d]"
+            }`}>
               <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-blue-500" />
-                <span className="text-xs font-bold uppercase tracking-wider">Filtros de Tópicos</span>
+                <Filter className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-[11px] font-bold uppercase tracking-wider">Filtros</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 md:max-w-2xl">
@@ -1635,7 +1717,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                   placeholder="Pesquisar assunto..."
                   value={filterText}
                   onChange={(e) => setFilterText(e.target.value)}
-                  className={`px-3 py-1.5 text-xs rounded-lg border outline-none ${
+                  className={`px-2.5 py-1 text-xs rounded-lg border outline-none ${
                     darkMode ? "bg-[#14203d] border-[#25365e] text-white" : "bg-white border-gray-200 text-gray-800"
                   }`}
                 />
@@ -1644,11 +1726,11 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                 <select
                   value={filterIncidencia}
                   onChange={(e) => setFilterIncidencia(e.target.value as any)}
-                  className={`px-2 py-1.5 text-xs rounded-lg border outline-none font-semibold cursor-pointer ${
+                  className={`px-2 py-1 text-xs rounded-lg border outline-none font-semibold cursor-pointer ${
                     darkMode ? "bg-[#14203d] border-[#25365e] text-white" : "bg-white border-gray-200 text-gray-800"
                   }`}
                 >
-                  <option value="TODAS">Qualquer Incidência</option>
+                  <option value="TODAS">Incidência: Todas</option>
                   <option value="ALTA">Alta Incidência</option>
                   <option value="MÉDIA">Média Incidência</option>
                   <option value="BAIXA">Baixa Incidência</option>
@@ -1658,11 +1740,11 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value as any)}
-                  className={`px-2 py-1.5 text-xs rounded-lg border outline-none font-semibold cursor-pointer ${
+                  className={`px-2 py-1 text-xs rounded-lg border outline-none font-semibold cursor-pointer ${
                     darkMode ? "bg-[#14203d] border-[#25365e] text-white" : "bg-white border-gray-200 text-gray-800"
                   }`}
                 >
-                  <option value="TODOS">Todos Status</option>
+                  <option value="TODOS">Status: Todos</option>
                   <option value="NÃO ESTUDADO">Não Estudado</option>
                   <option value="ESTUDADO">Estudado</option>
                   <option value="REVISADO">Revisado</option>
@@ -1671,14 +1753,274 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
             </div>
           )}
 
-          {/* LISTAGEM DE TÓPICOS PROGRAMÁTICOS COM MUDANÇA DE STATUS DIRECTA */}
-          <div className="space-y-3 max-h-[650px] overflow-y-auto pr-1">
+          {/* LISTAGEM DE TÓPICOS PROGRAMÁTICOS (MODO ENXUTO OU DETALHADO) */}
+          <div className="space-y-2 max-h-[650px] overflow-y-auto pr-1">
             {filteredTopics.map((ass, topicIdx) => {
               const totals = getTopicTotals(ass);
               const isOpen = activeAssuntoId === ass.id;
               const currentInc = ass.incidencia || "MÉDIA";
               const currentStatus = ass.status || "NÃO ESTUDADO";
 
+              // Next status cycle helper
+              const handleCycleStatus = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                const nextStatus: "NÃO ESTUDADO" | "ESTUDADO" | "REVISADO" =
+                  currentStatus === "NÃO ESTUDADO"
+                    ? "ESTUDADO"
+                    : currentStatus === "ESTUDADO"
+                    ? "REVISADO"
+                    : "NÃO ESTUDADO";
+                handleUpdateTopic(ass.id, { status: nextStatus });
+              };
+
+              const handleCycleIncidence = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                const nextInc: "ALTA" | "MÉDIA" | "BAIXA" = 
+                  currentInc === "ALTA" ? "MÉDIA" : currentInc === "MÉDIA" ? "BAIXA" : "ALTA";
+                handleUpdateTopic(ass.id, { incidencia: nextInc });
+              };
+
+              if (modoEnxuto) {
+                // MODO ENXUTO: Linha compacta, visual limpo e direto
+                return (
+                  <div
+                    key={ass.id ? `topic-${ass.id}` : `topic-idx-${topicIdx}`}
+                    className={`border rounded-xl transition-all ${
+                      isOpen
+                        ? darkMode
+                          ? "border-blue-500/50 bg-[#162547]/50"
+                          : "border-blue-400 bg-blue-50/50"
+                        : darkMode
+                        ? "border-[#1e2d4d] bg-[#14203e]/30 hover:bg-[#14203e]/60"
+                        : "border-gray-200 bg-gray-50/50 hover:bg-gray-50"
+                    }`}
+                  >
+                    {/* Compact Row */}
+                    <div 
+                      className="py-2 px-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 cursor-pointer"
+                      onClick={() => setActiveAssuntoId(isOpen ? null : ass.id)}
+                    >
+                      {/* Left: Status Toggle + Name + Incidência Badge */}
+                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                        {/* 1-Click Status Badge */}
+                        <button
+                          type="button"
+                          onClick={handleCycleStatus}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider shrink-0 transition-all cursor-pointer shadow-sm ${
+                            currentStatus === "REVISADO"
+                              ? "bg-emerald-600 text-white"
+                              : currentStatus === "ESTUDADO"
+                              ? "bg-blue-600 text-white"
+                              : darkMode
+                              ? "bg-gray-800 text-gray-400 hover:text-white"
+                              : "bg-gray-200 text-gray-600 hover:text-gray-900"
+                          }`}
+                          title="Clique para alternar: Não Estudado ➜ Estudado ➜ Revisado"
+                        >
+                          {currentStatus === "REVISADO" ? "✓ Revisado" : currentStatus === "ESTUDADO" ? "● Estudado" : "○ Não Estudado"}
+                        </button>
+
+                        <h4 className={`text-xs font-bold truncate flex-1 ${darkMode ? "text-white" : "text-gray-900"}`} title={ass.nome}>
+                          {ass.nome}
+                        </h4>
+
+                        {/* Incidence Badge */}
+                        <button
+                          type="button"
+                          onClick={handleCycleIncidence}
+                          className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 transition-colors cursor-pointer ${
+                            currentInc === "ALTA"
+                              ? "bg-red-500/15 text-red-400 border border-red-500/20"
+                              : currentInc === "MÉDIA"
+                              ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                              : "bg-blue-500/15 text-blue-400 border border-blue-500/20"
+                          }`}
+                          title="Clique para alternar incidência (Alta / Média / Baixa)"
+                        >
+                          {currentInc}
+                        </button>
+                      </div>
+
+                      {/* Right: Questions summary & Action buttons */}
+                      <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto" onClick={(e) => e.stopPropagation()}>
+                        <span className="text-[11px] font-mono font-semibold text-gray-400">
+                          {totals.total > 0 ? (
+                            <span>
+                              <strong className={darkMode ? "text-white" : "text-gray-800"}>{totals.total}q</strong>
+                              {" "}(<span className="text-emerald-400">{totals.acertos}A</span>/<span className="text-rose-400">{totals.erros}E</span>)
+                            </span>
+                          ) : (
+                            <span className="text-gray-500">0q</span>
+                          )}
+                        </span>
+
+                        {/* Toggle Question Logs Drawer */}
+                        <button
+                          type="button"
+                          onClick={() => setActiveAssuntoId(isOpen ? null : ass.id)}
+                          className={`p-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                            isOpen
+                              ? "bg-blue-600 text-white"
+                              : darkMode
+                              ? "text-blue-400 hover:bg-blue-500/10"
+                              : "text-blue-600 hover:bg-blue-50"
+                          }`}
+                          title={isOpen ? "Fechar registros" : "Ver/Adicionar questões"}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Trash button */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTopic(ass.id)}
+                          className={`p-1 rounded-md transition-colors cursor-pointer ${
+                            darkMode
+                              ? "text-gray-500 hover:text-rose-400 hover:bg-rose-500/10"
+                              : "text-gray-400 hover:text-rose-600 hover:bg-rose-50"
+                          }`}
+                          title="Excluir assunto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Compact Expandable Drawer for Question Logs */}
+                    {isOpen && (
+                      <div className={`p-3 border-t text-xs transition-all ${
+                        darkMode ? "border-[#1e2d4d] bg-[#0b1329]/90" : "border-gray-200 bg-white"
+                      }`}>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                            Registros de Questões: {ass.nome}
+                          </span>
+                        </div>
+
+                        {/* Log Rows list */}
+                        <div className="space-y-1.5 mb-3 max-h-36 overflow-y-auto pr-1">
+                          {ass.registros.map((reg, regIdx) => (
+                            <div
+                              key={reg.id ? `reg-${reg.id}` : `reg-idx-${regIdx}`}
+                              className={`flex justify-between items-center px-2.5 py-1.5 rounded-lg text-xs font-medium border ${
+                                darkMode 
+                                  ? "bg-[#14203e]/40 border-gray-800" 
+                                  : "bg-gray-50 border-gray-100"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5 text-gray-400 font-mono text-[11px]">
+                                <Calendar className="w-3 h-3 text-blue-500" />
+                                {formatarDataDDMMAAAA(reg.data)}
+                              </span>
+                              
+                              <div className="flex items-center space-x-3 text-[11px]">
+                                <span className={darkMode ? "text-emerald-400" : "text-emerald-600"}>
+                                  <strong>{reg.acertos}</strong> A
+                                </span>
+                                <span className={darkMode ? "text-red-400" : "text-red-600"}>
+                                  <strong>{reg.erros}</strong> E
+                                </span>
+                                <span className={darkMode ? "text-gray-300" : "text-gray-600"}>
+                                  Total: {reg.total}q
+                                </span>
+
+                                <button
+                                  onClick={() => handleDeleteQuestionLog(ass.id, reg.id)}
+                                  className="text-gray-400 hover:text-red-500 p-0.5 rounded hover:bg-red-500/10 transition-colors"
+                                  title="Excluir registro"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {ass.registros.length === 0 && (
+                            <p className={`text-[11px] text-center py-2 italic ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+                              Nenhum registro de questões para este assunto.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Quick Register form fields */}
+                        <div className={`p-2.5 rounded-lg border grid grid-cols-1 sm:grid-cols-4 gap-2 items-end ${
+                          darkMode ? "bg-[#0e172e] border-blue-900/40" : "bg-blue-50/45 border-blue-100"
+                        }`}>
+                          <div>
+                            <label className={`block text-[9px] font-bold uppercase tracking-wider mb-1 ${
+                              darkMode ? "text-gray-400" : "text-gray-600"
+                            }`}>
+                              Data
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="DD/MM/AAAA"
+                              value={newLogDate}
+                              onChange={(e) => setNewLogDate(e.target.value)}
+                              className={`w-full px-2 py-1 rounded border text-xs outline-none ${
+                                darkMode
+                                  ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                  : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                              }`}
+                            />
+                          </div>
+
+                          <div>
+                            <label className={`block text-[9px] font-bold uppercase tracking-wider mb-1 ${
+                              darkMode ? "text-gray-400" : "text-gray-600"
+                            }`}>
+                              Acertos
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={newLogAcertos}
+                              onChange={(e) => setNewLogAcertos(Math.max(0, parseInt(e.target.value) || 0))}
+                              className={`w-full px-2 py-1 rounded border text-xs outline-none ${
+                                darkMode
+                                  ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                  : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                              }`}
+                            />
+                          </div>
+
+                          <div>
+                            <label className={`block text-[9px] font-bold uppercase tracking-wider mb-1 ${
+                              darkMode ? "text-gray-400" : "text-gray-600"
+                            }`}>
+                              Erros
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={newLogErros}
+                              onChange={(e) => setNewLogErros(Math.max(0, parseInt(e.target.value) || 0))}
+                              className={`w-full px-2 py-1 rounded border text-xs outline-none ${
+                                darkMode
+                                  ? "bg-[#16223f] border-[#25365e] text-white focus:border-blue-500"
+                                  : "bg-white border-gray-200 text-gray-800 focus:border-blue-500"
+                              }`}
+                            />
+                          </div>
+
+                          <div>
+                            <button
+                              onClick={() => handleAddQuestionLog(ass.id)}
+                              className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded transition-all cursor-pointer shadow-sm flex items-center justify-center space-x-1"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Salvar</span>
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // MODO DETALHADO (Tradicional)
               return (
                 <div
                   key={ass.id ? `topic-${ass.id}` : `topic-idx-${topicIdx}`}
@@ -1701,13 +2043,8 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
 
                         {/* Interactive Click-to-Cycle Incidence Badge */}
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const nextInc: "ALTA" | "MÉDIA" | "BAIXA" = 
-                              currentInc === "ALTA" ? "MÉDIA" : currentInc === "MÉDIA" ? "BAIXA" : "ALTA";
-                            handleUpdateTopic(ass.id, { incidencia: nextInc });
-                          }}
-                          className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider transition-colors ${
+                          onClick={handleCycleIncidence}
+                          className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider transition-colors cursor-pointer ${
                             currentInc === "ALTA"
                               ? "bg-red-500/15 text-red-500 hover:bg-red-500/25 border border-red-500/20"
                               : currentInc === "MÉDIA"
@@ -1737,13 +2074,13 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                           <button
                             key={st}
                             onClick={() => handleUpdateTopic(ass.id, { status: st })}
-                            className={`px-2 py-1 rounded-md transition-all uppercase tracking-wider ${
+                            className={`px-2 py-1 rounded-md transition-all uppercase tracking-wider cursor-pointer ${
                               currentStatus === st
                                 ? st === "REVISADO"
-                                  ? "bg-emerald-600 text-white shadow-sm"
-                                  : st === "ESTUDADO"
-                                  ? "bg-blue-600 text-white shadow-sm"
-                                  : "bg-gray-500 text-white shadow-sm"
+                                ? "bg-emerald-600 text-white shadow-sm"
+                                : st === "ESTUDADO"
+                                ? "bg-blue-600 text-white shadow-sm"
+                                : "bg-gray-500 text-white shadow-sm"
                                 : darkMode
                                 ? "text-gray-400 hover:text-white"
                                 : "text-gray-500 hover:text-gray-900"
@@ -1757,7 +2094,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                       {/* Lixeira Delete button */}
                       <button
                         onClick={() => handleDeleteTopic(ass.id)}
-                        className={`p-1.5 rounded-lg border transition-all ${
+                        className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                           darkMode
                             ? "border-[#2d3f66] hover:bg-red-950/45 text-gray-400 hover:text-red-400"
                             : "border-gray-200 hover:bg-red-50 text-gray-400 hover:text-red-600"
@@ -1811,7 +2148,7 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
                               {/* Lixeira delete button for daily resolution entry */}
                               <button
                                 onClick={() => handleDeleteQuestionLog(ass.id, reg.id)}
-                                className={`text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-500/10 transition-colors`}
+                                className="text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-500/10 transition-colors cursor-pointer"
                                 title="Excluir registro"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1924,8 +2261,8 @@ export default function StudyView({ state, updateState, darkMode }: StudyViewPro
       </div>
 
       {/* SEÇÃO COMPLETA: SESSÕES REGISTRADAS (HISTÓRICO COMPLETO DE BLOCOS E QUESTÕES) */}
-      <div className="col-span-12 mt-4">
-        <div className={`p-6 rounded-3xl border transition-all ${
+      <div className="col-span-1 lg:col-span-2 mt-2">
+        <div className={`p-4 sm:p-6 rounded-3xl border transition-all ${
           darkMode ? "bg-[#0f1b35] border-[#1e2d4d]" : "bg-white border-gray-200 shadow-sm"
         }`}>
           {/* Header Bar */}

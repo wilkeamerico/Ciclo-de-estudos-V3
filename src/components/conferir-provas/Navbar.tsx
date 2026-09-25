@@ -2,17 +2,16 @@ import React from 'react';
 import { 
   FileText, 
   BarChart3, 
-  CheckCircle2, 
-  Calendar, 
   History, 
-  BookOpen,
-  Sparkles,
-  ArrowLeft
+  BookOpen, 
+  Sparkles, 
+  ArrowLeft, 
+  Target 
 } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'upload' | 'performance' | 'questions' | 'study' | 'history';
-  setActiveTab: (tab: 'upload' | 'performance' | 'questions' | 'study' | 'history') => void;
+  activeTab: 'dashboard' | 'upload' | 'performance' | 'history';
+  setActiveTab: (tab: 'dashboard' | 'upload' | 'performance' | 'history') => void;
   hasResult: boolean;
   examTitle?: string;
   darkMode?: boolean;
@@ -49,59 +48,32 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
-
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className={`font-bold tracking-tight text-base sm:text-lg ${
-                  darkMode ? "text-white" : "text-slate-900"
-                }`}>
-                  Corretor & Simulado IA
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  <Sparkles className="w-3 h-3 mr-1 text-indigo-400" />
-                  Gemini AI
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <h1 className={`text-sm font-black tracking-tight ${darkMode ? "text-white" : "text-slate-900"}`}>
+                  DASHBOARD DE SIMULADOS & PROVAS
+                </h1>
+                <span className={`text-[10px] block ${darkMode ? "text-gray-400" : "text-slate-500"}`}>
+                  {examTitle ? examTitle : "Cruzamento Inteligente de Provas com o Edital"}
                 </span>
               </div>
-              <p className={`text-xs hidden sm:block ${darkMode ? "text-gray-400" : "text-slate-500"}`}>
-                {examTitle ? `Prova: ${examTitle}` : 'Caderno • Edital & Pesos • Gabarito • Acompanhamento'}
-              </p>
             </div>
           </div>
 
-          {/* Navigation Tabs (Desktop) */}
-          <nav className={`hidden md:flex items-center space-x-1 p-1 rounded-xl border ${
-            darkMode ? "bg-[#0e172e] border-[#1a2b4c]" : "bg-slate-100 border-slate-200"
+          {/* Principal Tabs */}
+          <nav className={`hidden md:flex items-center p-1 rounded-xl border ${
+            darkMode ? "bg-[#101d3b] border-[#1e2d4d]" : "bg-slate-100 border-slate-200"
           }`}>
             <button
-              id="nav-tab-upload"
-              onClick={() => setActiveTab('upload')}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'upload'
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'dashboard'
                   ? darkMode
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'bg-white text-indigo-700 shadow-sm'
-                  : darkMode
-                    ? 'text-gray-400 hover:text-white'
-                    : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>1. Upload & Respostas</span>
-            </button>
-
-            <button
-              id="nav-tab-performance"
-              onClick={() => hasResult && setActiveTab('performance')}
-              disabled={!hasResult}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                !hasResult
-                  ? 'text-gray-500 opacity-50 cursor-not-allowed'
-                  : activeTab === 'performance'
-                  ? darkMode
-                    ? 'bg-indigo-600 text-white shadow-md'
+                    ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-white text-indigo-700 shadow-sm'
                   : darkMode
                     ? 'text-gray-400 hover:text-white'
@@ -109,56 +81,50 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <BarChart3 className="w-4 h-4" />
-              <span>2. Desempenho & Gráficos</span>
+              <span>Dashboard Geral</span>
             </button>
 
             <button
-              id="nav-tab-questions"
-              onClick={() => hasResult && setActiveTab('questions')}
-              disabled={!hasResult}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                !hasResult
-                  ? 'text-gray-500 opacity-50 cursor-not-allowed'
-                  : activeTab === 'questions'
+              type="button"
+              onClick={() => setActiveTab('upload')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'upload'
                   ? darkMode
-                    ? 'bg-indigo-600 text-white shadow-md'
+                    ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-white text-indigo-700 shadow-sm'
                   : darkMode
                     ? 'text-gray-400 hover:text-white'
                     : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>3. Caderno Corrigido</span>
+              <FileText className="w-4 h-4" />
+              <span>Anexar Prova / Novo Simulado</span>
             </button>
 
             <button
-              id="nav-tab-study"
-              onClick={() => hasResult && setActiveTab('study')}
-              disabled={!hasResult}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                !hasResult
-                  ? 'text-gray-500 opacity-50 cursor-not-allowed'
-                  : activeTab === 'study'
+              type="button"
+              onClick={() => setActiveTab('performance')}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'performance'
                   ? darkMode
-                    ? 'bg-indigo-600 text-white shadow-md'
+                    ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-white text-indigo-700 shadow-sm'
                   : darkMode
                     ? 'text-gray-400 hover:text-white'
                     : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Calendar className="w-4 h-4" />
-              <span>4. Plano de Estudos</span>
+              <Sparkles className="w-4 h-4" />
+              <span>Diagnóstico IA</span>
             </button>
 
             <button
-              id="nav-tab-history"
+              type="button"
               onClick={() => setActiveTab('history')}
-              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'history'
                   ? darkMode
-                    ? 'bg-indigo-600 text-white shadow-md'
+                    ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-white text-indigo-700 shadow-sm'
                   : darkMode
                     ? 'text-gray-400 hover:text-white'
@@ -174,55 +140,36 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Mobile Navigation bar */}
         <div className="flex md:hidden overflow-x-auto py-2 space-x-1 border-t border-slate-200 dark:border-[#1e2d4d] no-scrollbar">
           <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap cursor-pointer ${
+              activeTab === 'dashboard' ? 'bg-indigo-600 text-white' : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
+            }`}
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveTab('upload')}
-            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${
+            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap cursor-pointer ${
               activeTab === 'upload' ? 'bg-indigo-600 text-white' : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
             }`}
           >
-            1. Upload & Respostas
+            Anexar Prova
           </button>
           <button
-            onClick={() => hasResult && setActiveTab('performance')}
-            disabled={!hasResult}
-            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${
-              !hasResult
-                ? 'opacity-50 cursor-not-allowed text-gray-400 bg-slate-100 dark:bg-[#101d3b]'
-                : activeTab === 'performance'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
+            type="button"
+            onClick={() => setActiveTab('performance')}
+            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap cursor-pointer ${
+              activeTab === 'performance' ? 'bg-indigo-600 text-white' : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
             }`}
           >
-            2. Desempenho
+            Diagnóstico IA
           </button>
           <button
-            onClick={() => hasResult && setActiveTab('questions')}
-            disabled={!hasResult}
-            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${
-              !hasResult
-                ? 'opacity-50 cursor-not-allowed text-gray-400 bg-slate-100 dark:bg-[#101d3b]'
-                : activeTab === 'questions'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
-            }`}
-          >
-            3. Questões
-          </button>
-          <button
-            onClick={() => hasResult && setActiveTab('study')}
-            disabled={!hasResult}
-            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${
-              !hasResult
-                ? 'opacity-50 cursor-not-allowed text-gray-400 bg-slate-100 dark:bg-[#101d3b]'
-                : activeTab === 'study'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
-            }`}
-          >
-            4. Estudos
-          </button>
-          <button
+            type="button"
             onClick={() => setActiveTab('history')}
-            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap ${
+            className={`px-3 py-1 text-xs font-medium rounded-md whitespace-nowrap cursor-pointer ${
               activeTab === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-600 bg-slate-100 dark:bg-[#101d3b] dark:text-gray-300'
             }`}
           >

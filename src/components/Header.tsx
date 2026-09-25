@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BookOpen, Moon, Sun, RefreshCw, Trophy, Settings, Calendar, Award, FileText, LayoutDashboard, User, LogOut, Trash2, FileCheck, Target } from "lucide-react";
+import { BookOpen, Moon, Sun, RefreshCw, Trophy, Settings, Calendar, Award, FileText, LayoutDashboard, User, LogOut, Trash2, FileCheck, Target, BarChart3 } from "lucide-react";
 
 interface HeaderProps {
   orgao: string;
@@ -42,6 +42,7 @@ export default function Header({
     { id: "edital", label: "Edital", icon: FileText },
     { id: "planejamento", label: "Planejamento de Estudos", icon: Calendar },
     { id: "estudar", label: "Estudar", icon: BookOpen },
+    { id: "relatorio", label: "Relatório de Desempenho", icon: BarChart3 },
     { id: "discursiva", label: "Discursiva", icon: Award },
     { id: "simulado", label: "Simulado", icon: Target },
   ];

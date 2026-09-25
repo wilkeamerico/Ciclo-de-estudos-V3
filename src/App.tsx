@@ -7,6 +7,7 @@ import PlanningView from "./components/PlanningView";
 import DiscursivaView from "./components/DiscursivaView";
 import ResumoView from "./components/ResumoView";
 import SimuladoView from "./components/SimuladoView";
+import RelatorioDesempenhoView from "./components/RelatorioDesempenhoView";
 import PainelGeral from "./components/PainelGeral";
 import { StudyState, CicloEstudo, Edital } from "./types";
 import { DEFAULT_STUDY_STATE, EMPTY_STUDY_STATE, sanitizeCycleState } from "./utils/defaultData";
@@ -48,7 +49,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   // 3. Active Tab Selection within cycle
-  const [activeTab, setActiveTab] = useState<"dashboard" | "resumo" | "edital" | "metas" | "planejamento" | "estudar" | "discursiva" | "simulado">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "resumo" | "edital" | "metas" | "planejamento" | "estudar" | "relatorio" | "discursiva" | "simulado">("dashboard");
 
   // 4. Dark/Light Theme support
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -633,6 +634,14 @@ export default function App() {
               state={state}
               updateState={handleUpdateState}
               darkMode={darkMode}
+            />
+          )}
+
+          {activeTab === "relatorio" && (
+            <RelatorioDesempenhoView
+              state={state}
+              darkMode={darkMode}
+              onNavigateTab={(tab: string) => setActiveTab(tab as any)}
             />
           )}
 

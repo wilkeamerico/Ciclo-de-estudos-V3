@@ -1006,6 +1006,12 @@ export default function DashboardView({ state, darkMode, onNavigateTab, onSyncAl
                       Iniciar Estudo Agora
                     </button>
                     <button
+                      onClick={() => onNavigateTab("relatorio")}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                    >
+                      Relatório de Desempenho
+                    </button>
+                    <button
                       onClick={() => onNavigateTab("planejamento")}
                       className={`px-3 py-1.5 rounded-lg font-bold text-[11px] uppercase tracking-wider transition-all cursor-pointer border ${
                         darkMode ? "bg-white/5 border-white/15 text-gray-300 hover:bg-white/10" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-100"

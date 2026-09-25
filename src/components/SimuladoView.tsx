@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { StudyState, CicloEstudo, ExamResult, ExamFile, TopicStudyMaterial, StudyStatus } from "../types";
 import { Navbar } from "./conferir-provas/Navbar";
+import { SimuladoDashboardView } from "./conferir-provas/SimuladoDashboardView";
 import { UploadSection } from "./conferir-provas/UploadSection";
 import { PerformanceDashboard } from "./conferir-provas/PerformanceDashboard";
 import { QuestionReview } from "./conferir-provas/QuestionReview";
@@ -31,8 +32,8 @@ export default function SimuladoView({
   isPainelGeral = false,
   isAvulso = false,
 }: SimuladoViewProps) {
-  // Navigation active tab for Conferir-provas structure
-  const [activeTab, setActiveTab] = useState<'upload' | 'performance' | 'questions' | 'study' | 'history'>('upload');
+  // Navigation active tab for Conferir-provas structure - Defaults directly to Dashboard
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'upload' | 'performance' | 'history'>('dashboard');
 
   // Active Exam Form Setup State
   const [examTitle, setExamTitle] = useState(() => {
@@ -196,8 +197,8 @@ export default function SimuladoView({
         });
       }
 
-      // Switch to performance dashboard
-      setActiveTab("performance");
+      // Switch to dashboard
+      setActiveTab("dashboard");
     } catch (error: any) {
       console.error("Erro ao analisar prova:", error);
       setErrorMessage(error?.message || "Ocorreu um erro ao comunicar com a IA para analisar o simulado.");
@@ -239,31 +240,44 @@ export default function SimuladoView({
     }
   };
 
-  // Update weakness status
-  const handleUpdateWeaknessStatus = (index: number, newStatus: StudyStatus) => {
-    if (!currentResult) return;
+  // Update weakness status for a specific exam
+  const handleUpdateWeaknessStatus = (examId: string, index: number, newStatus: StudyStatus) => {
+    setHistory((prev) =>
+      prev.map((exam) => {
+        if (exam.id !== examId) return exam;
+        const updatedWeaknesses = [...(exam.criticalWeaknesses || [])];
+        if (updatedWeaknesses[index]) {
+          updatedWeaknesses[index] = {
+            ...updatedWeaknesses[index],
+            status: newStatus,
+          };
+        }
+        return {
+          ...exam,
+          criticalWeaknesses: updatedWeaknesses,
+        };
+      })
+    );
 
-    const updatedWeaknesses = [...currentResult.criticalWeaknesses];
-    if (updatedWeaknesses[index]) {
-      updatedWeaknesses[index] = {
-        ...updatedWeaknesses[index],
-        status: newStatus,
-      };
-
-      const updatedResult = {
-        ...currentResult,
-        criticalWeaknesses: updatedWeaknesses,
-      };
-
-      setCurrentResult(updatedResult);
-      setHistory((prev) => prev.map((h) => (h.id === updatedResult.id ? updatedResult : h)));
+    if (currentResult && currentResult.id === examId) {
+      const updatedWeaknesses = [...(currentResult.criticalWeaknesses || [])];
+      if (updatedWeaknesses[index]) {
+        updatedWeaknesses[index] = {
+          ...updatedWeaknesses[index],
+          status: newStatus,
+        };
+        setCurrentResult({
+          ...currentResult,
+          criticalWeaknesses: updatedWeaknesses,
+        });
+      }
     }
   };
 
   // Select exam from history
   const handleSelectExamFromHistory = (exam: ExamResult) => {
     setCurrentResult(exam);
-    setActiveTab("performance");
+    setActiveTab("history");
   };
 
   // Delete exam from history
@@ -272,15 +286,9 @@ export default function SimuladoView({
       setHistory((prev) => prev.filter((h) => h.id !== id));
       if (currentResult?.id === id) {
         setCurrentResult(null);
-        setActiveTab("upload");
       }
     }
   };
-
-  // Unique list of disciplines in the active result
-  const resultDisciplines = currentResult
-    ? Array.from(new Set(currentResult.questions.map((q) => q.discipline))).filter(Boolean)
-    : [];
 
   return (
     <div className={`min-h-screen transition-colors ${darkMode ? "bg-[#070d1e] text-white" : "bg-slate-50 text-slate-900"}`}>
@@ -288,7 +296,7 @@ export default function SimuladoView({
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        hasResult={currentResult !== null}
+        hasResult={history.length > 0 || currentResult !== null}
         examTitle={currentResult?.examTitle || examTitle}
         darkMode={darkMode}
         onVoltarParaCiclos={onVoltarParaCiclos}
@@ -318,6 +326,25 @@ export default function SimuladoView({
 
       {/* Main View Container */}
       <div className="pb-16">
+        {activeTab === 'dashboard' && (
+          <SimuladoDashboardView
+            history={history}
+            edital={state.edital}
+            targetScore={state.simulados?.metaAproveitamento || 85}
+            onOpenUploadModal={() => {
+              setCandidateAnswers({});
+              setActiveTab('upload');
+            }}
+            onDeleteExam={handleDeleteExamFromHistory}
+            onUpdateWeaknessStatus={handleUpdateWeaknessStatus}
+            onGenerateStudyTopic={handleGenerateStudyTopic}
+            activeTopicStudy={activeTopicStudy}
+            isLoadingStudyMaterial={isLoadingStudyMaterial}
+            onCloseTopicStudy={() => setActiveTopicStudy(null)}
+            darkMode={darkMode}
+          />
+        )}
+
         {activeTab === 'upload' && (
           <UploadSection
             examTitle={examTitle}
@@ -342,35 +369,17 @@ export default function SimuladoView({
           />
         )}
 
-        {activeTab === 'performance' && currentResult && (
+        {activeTab === 'performance' && (
           <PerformanceDashboard
             result={currentResult}
             history={history}
+            edital={state.edital}
             targetScore={state.simulados?.metaAproveitamento || 85}
-            onGoToQuestions={() => setActiveTab('questions')}
-            onGoToStudy={() => setActiveTab('study')}
-            darkMode={darkMode}
-          />
-        )}
-
-        {activeTab === 'questions' && currentResult && (
-          <QuestionReview
-            questions={currentResult.questions}
-            disciplines={resultDisciplines}
-            onGenerateStudyTopic={handleGenerateStudyTopic}
-            darkMode={darkMode}
-          />
-        )}
-
-        {activeTab === 'study' && currentResult && (
-          <StudyPlanner
-            studyPlan={currentResult.studyPlan}
-            criticalWeaknesses={currentResult.criticalWeaknesses}
-            onUpdateWeaknessStatus={handleUpdateWeaknessStatus}
-            activeTopicStudy={activeTopicStudy}
-            isLoadingStudyMaterial={isLoadingStudyMaterial}
-            onGenerateStudyTopic={handleGenerateStudyTopic}
-            onCloseTopicStudy={() => setActiveTopicStudy(null)}
+            onSelectExam={handleSelectExamFromHistory}
+            onStartNew={() => {
+              setCandidateAnswers({});
+              setActiveTab('upload');
+            }}
             darkMode={darkMode}
           />
         )}
@@ -385,6 +394,11 @@ export default function SimuladoView({
               setCandidateAnswers({});
               setActiveTab('upload');
             }}
+            onUpdateWeaknessStatus={handleUpdateWeaknessStatus}
+            onGenerateStudyTopic={handleGenerateStudyTopic}
+            activeTopicStudy={activeTopicStudy}
+            isLoadingStudyMaterial={isLoadingStudyMaterial}
+            onCloseTopicStudy={() => setActiveTopicStudy(null)}
             darkMode={darkMode}
           />
         )}
